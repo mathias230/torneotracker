@@ -28,7 +28,7 @@ const roundOptions = [
 export default function KnockoutStageManagement() {
   const { teams, knockoutRounds } = useTournamentState();
   const dispatch = useTournamentDispatch();
-  const [startingRoundValue, setStartingRoundValue] = useState<string>('8'); // Default to Quarter-Finals (8 teams)
+  const [startingRoundValue, setStartingRoundValue] = useState<string>('8'); 
   const [selectedTeamsForBracket, setSelectedTeamsForBracket] = useState<string[]>([]);
   const [matchScores, setMatchScores] = useState<KnockoutScoreInput>({});
   const isClient = useIsClient();
@@ -101,16 +101,17 @@ export default function KnockoutStageManagement() {
 
   const currentRequiredTeams = parseInt(startingRoundValue, 10);
 
-  // Calculate effective number of playable rounds for title logic
   let numEffectiveRounds = 0;
   if (knockoutRounds.length > 0) {
-    // If the last round in the array is structured like a champion slot (1 match, no team2Id),
-    // then the number of playable rounds is one less than the total length.
-    // Otherwise, all rounds are considered playable (e.g., a 2-team bracket where the final *is* the championship).
     const lastRoundData = knockoutRounds[knockoutRounds.length - 1];
-    if (knockoutRounds.length > 1 && lastRoundData.length === 1 && lastRoundData[0].team2Id === undefined) {
-      numEffectiveRounds = knockoutRounds.length - 1;
-    } else {
+    if (knockoutRounds.length > 0 && lastRoundData.length === 1 && lastRoundData[0].team2Id === undefined && !lastRoundData[0].team1Id?.startsWith('placeholder-') && !lastRoundData[0].team1Id?.startsWith('winner-')) {
+      // This is a true champion slot if team1Id is a resolved team ID
+      numEffectiveRounds = knockoutRounds.length -1;
+    } else if (knockoutRounds.length > 0 && lastRoundData.length === 1 && lastRoundData[0].team2Id === undefined && (lastRoundData[0].team1Id?.startsWith('placeholder-') || lastRoundData[0].team1Id?.startsWith('winner-')) && knockoutRounds.length > 1) {
+       // This is a placeholder champion slot (e.g. bracket just created)
+       numEffectiveRounds = knockoutRounds.length -1;
+    }
+     else {
       numEffectiveRounds = knockoutRounds.length;
     }
   }
@@ -123,6 +124,8 @@ export default function KnockoutStageManagement() {
       <CardContent><div className="animate-pulse h-20 bg-muted rounded-md w-full"></div></CardContent>
     </Card>;
   }
+  
+  const roundsToDisplay = knockoutRounds.filter((_, idx) => idx < numEffectiveRounds);
 
   return (
     <div className="space-y-8">
@@ -181,51 +184,34 @@ export default function KnockoutStageManagement() {
         </CardContent>
       </Card>
 
-      {knockoutRounds.length > 0 && (
+      {roundsToDisplay.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="font-headline text-2xl text-primary">Cuadro de Eliminatorias</CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto pb-6 pt-2">
             <div className="flex items-start space-x-8 min-w-max">
-              {knockoutRounds.map((round, roundIndex) => {
+              {roundsToDisplay.map((round, roundIndex) => {
                 
-                let roundTitle = `Ronda ${roundIndex + 1}`; // Default title
-                const currentMatchForTitle = round.length > 0 ? round[0] : null;
-
-                // Determine if this round is the designated champion display slot
-                const isDesignatedChampionSlot = 
-                    numEffectiveRounds > 0 &&
-                    roundIndex === finalPlayableRoundIndex + 1 && // This is the round *after* the last playable one
-                    knockoutRounds.length === numEffectiveRounds + 1 && // Bracket has a dedicated champion slot
-                    round.length === 1 &&
-                    currentMatchForTitle?.team2Id === undefined;
-
-                if (isDesignatedChampionSlot) {
-                    roundTitle = 'Campeón del Torneo';
-                } else if (roundIndex === finalPlayableRoundIndex) {
-                    // This is the final playable round
-                    if (currentMatchForTitle && currentMatchForTitle.played && 
-                        currentMatchForTitle.team1Score !== null && currentMatchForTitle.team2Score !== null && 
-                        currentMatchForTitle.team1Score !== currentMatchForTitle.team2Score &&
-                        numEffectiveRounds === 1 // Final match decided the champ, and it's a 2-team bracket
-                        ) {
-                      roundTitle = 'Campeón del Torneo'; 
+                let roundTitle = `Ronda ${roundIndex + 1}`;
+                if (roundIndex === finalPlayableRoundIndex) {
+                    const finalMatch = round.length === 1 ? round[0] : null;
+                    const winnerIdFinal = finalMatch && finalMatch.played && finalMatch.team1Score !== null && finalMatch.team2Score !== null ? (finalMatch.team1Score > finalMatch.team2Score ? finalMatch.team1Id : finalMatch.team2Score > finalMatch.team1Score ? finalMatch.team2Id : null) : null;
+                    if (winnerIdFinal) {
+                        roundTitle = `Campeón: ${getTeamName(winnerIdFinal)}`;
                     } else {
-                      roundTitle = "Final";
+                        roundTitle = "Final";
                     }
-                } else if (finalPlayableRoundIndex >=0 && roundIndex === finalPlayableRoundIndex - 1) {
+                } else if (finalPlayableRoundIndex >= 0 && roundIndex === finalPlayableRoundIndex - 1) {
                     roundTitle = "Semifinales";
-                } else if (finalPlayableRoundIndex >=0 && roundIndex === finalPlayableRoundIndex - 2) {
+                } else if (finalPlayableRoundIndex >= 0 && roundIndex === finalPlayableRoundIndex - 2) {
                     roundTitle = "Cuartos de Final";
-                } else if (finalPlayableRoundIndex >=0 && roundIndex === finalPlayableRoundIndex - 3) {
+                } else if (finalPlayableRoundIndex >= 0 && roundIndex === finalPlayableRoundIndex - 3) {
                     roundTitle = "Octavos de Final";
-                } else if (finalPlayableRoundIndex >=0 && roundIndex === finalPlayableRoundIndex - 4) {
+                } else if (finalPlayableRoundIndex >= 0 && roundIndex === finalPlayableRoundIndex - 4) {
                     roundTitle = "Dieciseisavos de Final";
                 }
                 
-                const isVisuallyChampionRound = (isDesignatedChampionSlot || (roundTitle === 'Campeón del Torneo' && roundIndex === finalPlayableRoundIndex && numEffectiveRounds === 1));
-
                 return (
                   <div key={`round-${roundIndex}`} className="flex flex-col space-y-12 min-w-[280px] pt-10 relative">
                     <h3 className="text-lg font-semibold text-center text-accent absolute -top-0 left-0 right-0 whitespace-nowrap">
@@ -234,18 +220,18 @@ export default function KnockoutStageManagement() {
                     
                     <div className="space-y-16">
                       {round.map((match, matchIndex) => {
-                        const isFinalWinnerDisplay = isVisuallyChampionRound && match.played && match.team1Id && !match.team2Id ;
+                        const winnerId = match.played && match.team1Score !== null && match.team2Score !== null ? (match.team1Score > match.team2Score ? match.team1Id : match.team2Score > match.team1Score ? match.team2Id : null) : null;
+                        
+                        const isActualFinalMatchAndWon = roundIndex === finalPlayableRoundIndex && match.played && winnerId;
                       
                         const team1IsPlaceholder = !match.team1Id || match.team1Id.startsWith('winner-') || match.team1Id.startsWith('placeholder-');
                         const team2IsPlaceholder = !match.team2Id || match.team2Id.startsWith('winner-') || match.team2Id.startsWith('placeholder-');
                         const canEditScores = (!match.played || matchScores[match.id] !== undefined) && !team1IsPlaceholder && !team2IsPlaceholder;
 
-                        const winnerId = match.played && match.team1Score !== null && match.team2Score !== null ? (match.team1Score > match.team2Score ? match.team1Id : match.team2Score > match.team1Score ? match.team2Id : null) : null;
-
                         return (
                           <div key={match.id} className="bg-card rounded-lg shadow-md relative isolate">
                             
-                            {isFinalWinnerDisplay ? (
+                            {isActualFinalMatchAndWon ? (
                               <div className="text-center py-8 px-4">
                                 <Trophy className="h-16 w-16 text-amber-400 mx-auto mb-4" />
                                 <p className="text-2xl font-bold text-primary">{getTeamName(winnerId)}</p>
@@ -278,7 +264,6 @@ export default function KnockoutStageManagement() {
                                 </div>
 
                                 {/* Team 2 */}
-                                {(!match.team2Id && match.team1Id && !team1IsPlaceholder && isVisuallyChampionRound) ? null : ( 
                                 <div className="flex items-stretch">
                                    <span 
                                     className={cn(
@@ -301,16 +286,14 @@ export default function KnockoutStageManagement() {
                                     disabled={team2IsPlaceholder || (match.played && matchScores[match.id] === undefined)}
                                   />
                                 </div>
-                                )}
 
-
-                                {(team1IsPlaceholder || (team2IsPlaceholder && match.team2Id)) && !isFinalWinnerDisplay && (
+                                {(team1IsPlaceholder || team2IsPlaceholder) && (
                                     <p className="text-xs text-muted-foreground text-center pt-1">Esperando equipos...</p>
                                   )}
                                 
-                                {!team1IsPlaceholder && (!team2IsPlaceholder && match.team2Id) && !isFinalWinnerDisplay && (
+                                {!team1IsPlaceholder && !team2IsPlaceholder && (
                                     <Button
-                                      onClick={() => handleUpdateMatchResult(roundIndex, matchIndex, match.id)}
+                                      onClick={() => handleUpdateMatchResult(match.roundIndex, match.matchIndexInRound, match.id)}
                                       size="sm"
                                       variant="outline"
                                       className="w-full mt-2 h-9 text-xs"
@@ -323,20 +306,20 @@ export default function KnockoutStageManagement() {
                                 }
                               </div>
                             )}
-                            {/* Connector lines (simplified) */}
-                            {!isVisuallyChampionRound && ( 
+                            {/* Connector lines */}
+                            {(roundIndex < finalPlayableRoundIndex) && ( 
                               <>
                                 <div className="absolute top-1/2 -right-4 transform -translate-y-1/2 w-4 h-px bg-border -z-10"></div>
-                                { (roundIndex < knockoutRounds.length -1 && knockoutRounds[roundIndex+1][Math.floor(matchIndex/2)]) &&
+                                { ( knockoutRounds[roundIndex+1] && knockoutRounds[roundIndex+1][Math.floor(matchIndex/2)] ) &&
                                   (matchIndex % 2 === 0 ? ( 
-                                    <div className="absolute top-1/2 -right-4 transform  w-px bg-border -z-10" style={{height: 'calc(50% + 4rem)' , bottom: '0%'}}></div>
+                                    <div className="absolute top-1/2 -right-4 transform w-px bg-border -z-10" style={{height: 'calc(50% + 4rem)' , bottom: '0%'}}></div>
                                   ) : ( 
                                     <div className="absolute bottom-1/2 -right-4 transform w-px bg-border -z-10" style={{height: 'calc(50% + 4rem)' , top: '0%'}}></div>
                                   ))
                                 }
                               </>
                             )}
-                             {roundIndex > 0 && !isVisuallyChampionRound && ( 
+                             {roundIndex > 0 && ( 
                                <div className="absolute top-1/2 -left-4 transform -translate-y-1/2 w-4 h-px bg-border -z-10"></div>
                             )}
                           </div>
@@ -350,7 +333,7 @@ export default function KnockoutStageManagement() {
           </CardContent>
         </Card>
       )}
-      {knockoutRounds.length === 0 && (
+      {roundsToDisplay.length === 0 && (
         <p className="text-muted-foreground text-center mt-6">Aún no se ha generado un cuadro de eliminatorias. Configura y crea uno arriba.</p>
       )}
     </div>
