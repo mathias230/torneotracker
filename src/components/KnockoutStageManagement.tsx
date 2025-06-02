@@ -1,3 +1,4 @@
+
 "use client";
 import React, { useState } from 'react';
 import { useTournamentState, useTournamentDispatch, useIsClient } from '@/components/TournamentContext';
@@ -6,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { GitFork, Save, Users } from 'lucide-react';
+import { GitFork, Save, Users, Trophy } from 'lucide-react'; // Added Trophy
 import { toast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -65,6 +66,10 @@ export default function KnockoutStageManagement() {
 
     if (isNaN(team1Score) || isNaN(team2Score) || team1Score < 0 || team2Score < 0) {
       toast({ title: "Error", description: "Scores must be valid non-negative numbers.", variant: "destructive" });
+      return;
+    }
+    if (team1Score === team2Score) {
+      toast({ title: "Error", description: "Knockout matches cannot end in a draw. Please enter a winner.", variant: "destructive" });
       return;
     }
     dispatch({ type: 'UPDATE_KNOCKOUT_MATCH_RESULT', payload: { roundIndex, matchIndexInRound, team1Score, team2Score } });
@@ -151,68 +156,91 @@ export default function KnockoutStageManagement() {
           </CardHeader>
           <CardContent>
             <div className="flex space-x-4 overflow-x-auto pb-4">
-              {knockoutRounds.map((round, roundIndex) => (
-                <div key={`round-${roundIndex}`} className="min-w-[280px] space-y-4">
-                  <h3 className="text-lg font-semibold text-center text-accent">
-                    {roundIndex === knockoutRounds.length - 1 && round.length === 1 && round[0].team1Id && !round[0].team1Id.startsWith('winner-') && !round[0].team1Id.startsWith('placeholder-') && !round[0].team2Id ? 'Winner' : 
-                     roundIndex === knockoutRounds.length - 1 ? 'Final' : 
-                     roundIndex === knockoutRounds.length - 2 ? 'Semi-Finals' : 
-                     roundIndex === knockoutRounds.length - 3 ? 'Quarter-Finals' : 
-                     `Round ${roundIndex + 1}`}
-                  </h3>
-                  {round.map((match, matchIndex) => (
-                    <Card key={match.id} className={`p-3 shadow-md ${match.played ? 'bg-green-50' : 'bg-background'}`}>
-                      <p className="text-xs text-muted-foreground mb-1">Match {matchIndex + 1}</p>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className={`font-medium ${match.played && match.team1Score !== null && match.team2Score !== null && match.team1Score > match.team2Score ? 'text-green-600 font-bold' : ''}`}>
-                            {getTeamName(match.team1Id, match.placeholder || `Team ${matchIndex*2+1}`)}
-                          </span>
-                           <Input
-                            type="number"
-                            min="0"
-                            placeholder="-"
-                            value={matchScores[match.id]?.team1Score ?? match.team1Score ?? ''}
-                            onChange={(e) => handleScoreChange(match.id, 'team1', e.target.value)}
-                            className="w-14 h-8 text-xs mx-1"
-                            disabled={match.played && matchScores[match.id] === undefined || (!match.team1Id || match.team1Id.startsWith('winner-') || match.team1Id.startsWith('placeholder-'))}
-                          />
-                        </div>
-                        <div className="text-center text-sm text-muted-foreground">vs</div>
-                        <div className="flex items-center justify-between">
-                           <span className={`font-medium ${match.played && match.team1Score !== null && match.team2Score !== null && match.team2Score > match.team1Score ? 'text-green-600 font-bold' : ''}`}>
-                             {getTeamName(match.team2Id, match.placeholder || `Team ${matchIndex*2+2}`)}
-                           </span>
-                          <Input
-                            type="number"
-                            min="0"
-                            placeholder="-"
-                            value={matchScores[match.id]?.team2Score ?? match.team2Score ?? ''}
-                            onChange={(e) => handleScoreChange(match.id, 'team2', e.target.value)}
-                            className="w-14 h-8 text-xs mx-1"
-                            disabled={match.played && matchScores[match.id] === undefined || (!match.team2Id || match.team2Id.startsWith('winner-') || match.team2Id.startsWith('placeholder-'))}
-                          />
-                        </div>
-                         {(!match.team1Id || match.team1Id.startsWith('winner-') || match.team1Id.startsWith('placeholder-') || !match.team2Id || match.team2Id.startsWith('winner-') || match.team2Id.startsWith('placeholder-')) && !match.played ? (
-                            <p className="text-xs text-muted-foreground text-center">Waiting for teams...</p>
-                          ): (
-                            <Button
-                              onClick={() => handleUpdateMatchResult(roundIndex, matchIndex, match.id)}
-                              size="sm"
-                              variant="outline"
-                              className="w-full mt-2 h-8 text-xs"
-                              disabled={match.played && matchScores[match.id] === undefined}
-                              aria-label="Save knockout match score"
-                            >
-                              <Save className="mr-1 h-3 w-3" /> Save Score
-                            </Button>
-                          )
-                        }
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              ))}
+              {knockoutRounds.map((round, roundIndex) => {
+                const isFinalRound = roundIndex === knockoutRounds.length - 1;
+                return (
+                  <div key={`round-${roundIndex}`} className="min-w-[300px] space-y-4 flex-shrink-0">
+                    <h3 className="text-lg font-semibold text-center text-accent">
+                      {isFinalRound && round.length === 1 && round[0].team1Id && !round[0].team1Id.startsWith('winner-') && !round[0].team1Id.startsWith('placeholder-') && !round[0].team2Id ? 'Tournament Winner' : 
+                       isFinalRound ? 'Final' : 
+                       roundIndex === knockoutRounds.length - 2 ? 'Semi-Finals' : 
+                       roundIndex === knockoutRounds.length - 3 ? 'Quarter-Finals' : 
+                       `Round ${roundIndex + 1}`}
+                    </h3>
+                    {round.map((match, matchIndex) => {
+                      const isFinalWinnerDisplay = isFinalRound && round.length === 1 && match.team1Id && !match.team1Id.startsWith('winner-') && !match.team1Id.startsWith('placeholder-') && !match.team2Id;
+                      
+                      const team1IsPlaceholder = !match.team1Id || match.team1Id.startsWith('winner-') || match.team1Id.startsWith('placeholder-');
+                      const team2IsPlaceholder = !match.team2Id || match.team2Id.startsWith('winner-') || match.team2Id.startsWith('placeholder-');
+                      const canEditScores = (!match.played || matchScores[match.id] !== undefined);
+
+                      return (
+                        <Card key={match.id} className={`p-4 shadow-md ${match.played ? 'bg-green-50 dark:bg-green-900/30' : 'bg-background'}`}>
+                          {!isFinalWinnerDisplay && <p className="text-xs text-muted-foreground mb-2">Match {matchIndex + 1}</p>}
+                          
+                          {isFinalWinnerDisplay ? (
+                            <div className="text-center py-4">
+                              <Trophy className="h-12 w-12 text-amber-500 mx-auto mb-3" />
+                              <p className="text-xl font-bold text-primary">{getTeamName(match.team1Id)}</p>
+                              <p className="text-sm text-muted-foreground">Is the Champion!</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <span className={`font-medium text-sm truncate pr-2 ${match.played && match.team1Score !== null && match.team2Score !== null && match.team1Score > match.team2Score ? 'text-green-600 dark:text-green-400 font-bold' : 'text-foreground'}`}>
+                                  {getTeamName(match.team1Id, match.placeholder || `Team A`)}
+                                </span>
+                                 <Input
+                                  type="number"
+                                  min="0"
+                                  placeholder="-"
+                                  value={matchScores[match.id]?.team1Score ?? match.team1Score ?? ''}
+                                  onChange={(e) => handleScoreChange(match.id, 'team1', e.target.value)}
+                                  className="w-14 h-8 text-xs text-center"
+                                  disabled={!canEditScores || team1IsPlaceholder}
+                                />
+                              </div>
+                              
+                              <div className="text-center text-xs text-muted-foreground my-1">vs</div>
+                              
+                              <div className="flex items-center justify-between">
+                                 <span className={`font-medium text-sm truncate pr-2 ${match.played && match.team1Score !== null && match.team2Score !== null && match.team2Score > match.team1Score ? 'text-green-600 dark:text-green-400 font-bold' : 'text-foreground'}`}>
+                                   {getTeamName(match.team2Id, match.placeholder || `Team B`)}
+                                 </span>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  placeholder="-"
+                                  value={matchScores[match.id]?.team2Score ?? match.team2Score ?? ''}
+                                  onChange={(e) => handleScoreChange(match.id, 'team2', e.target.value)}
+                                  className="w-14 h-8 text-xs text-center"
+                                  disabled={!canEditScores || team2IsPlaceholder}
+                                />
+                              </div>
+
+                              {(team1IsPlaceholder || team2IsPlaceholder) ? (
+                                  <p className="text-xs text-muted-foreground text-center pt-2">Waiting for teams...</p>
+                                ): (
+                                  <Button
+                                    onClick={() => handleUpdateMatchResult(roundIndex, matchIndex, match.id)}
+                                    size="sm"
+                                    variant="outline"
+                                    className="w-full mt-3 h-8 text-xs"
+                                    disabled={!canEditScores || team1IsPlaceholder || team2IsPlaceholder}
+                                    aria-label="Save knockout match score"
+                                  >
+                                    <Save className="mr-1 h-3 w-3" /> {match.played && matchScores[match.id] === undefined ? 'Update Score' : 'Save Score'}
+                                  </Button>
+                                )
+                              }
+                            </div>
+                          )}
+                        </Card>
+                      );
+                    })}
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
