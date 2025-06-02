@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { PlusCircle, Trash2, Users, ListChecks, Swords, Save, XCircle } from 'lucide-react';
+import { PlusCircle, Trash2, Users, ListChecks, Swords, Save, XCircle, Repeat } from 'lucide-react';
 import { toast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -30,6 +30,7 @@ export default function GroupStageManagement() {
   const { teams, groups } = useTournamentState();
   const dispatch = useTournamentDispatch();
   const [groupName, setGroupName] = useState('');
+  const [numRandomGroups, setNumRandomGroups] = useState('2');
   const [selectedTeamToAdd, setSelectedTeamToAdd] = useState<{ [groupId: string]: string }>({});
   const [matchScores, setMatchScores] = useState<MatchScoreInput>({});
   const isClient = useIsClient();
@@ -72,7 +73,7 @@ export default function GroupStageManagement() {
       return;
     }
     dispatch({ type: 'GENERATE_GROUP_MATCHES', payload: { groupId } });
-    toast({ title: "Success", description: "Matches generated for the group." });
+    toast({ title: "Success", description: "Matches generated (random order) for the group." });
   };
 
   const handleScoreChange = (groupId: string, matchId: string, team: 'team1' | 'team2', value: string) => {
@@ -143,6 +144,25 @@ export default function GroupStageManagement() {
     return standings.sort((a, b) => b.points - a.points || b.gd - a.gd || b.gf - a.gf || a.teamName.localeCompare(b.teamName));
   }, [groups, teams]);
 
+  const handleCreateRandomGroups = () => {
+    const count = parseInt(numRandomGroups, 10);
+    if (isNaN(count) || count <= 0) {
+      toast({ title: "Error", description: "Please enter a valid number of groups.", variant: "destructive" });
+      return;
+    }
+    if (teams.length === 0) {
+       toast({ title: "Error", description: "No teams available to create groups. Please add teams first.", variant: "destructive" });
+      return;
+    }
+     if (teams.length < count) {
+      toast({ title: "Error", description: `Not enough teams (have ${teams.length}, need at least ${count}) to create ${count} groups.`, variant: "destructive" });
+      return;
+    }
+    dispatch({ type: 'RANDOMLY_CREATE_GROUPS_AND_ASSIGN_TEAMS', payload: { numGroups: count, groupNamePrefix: "Random Group" } });
+    toast({ title: "Success", description: `${count} random groups created and teams assigned.` });
+    setNumRandomGroups('2'); 
+  };
+
 
   if (!isClient) {
      return <Card className="w-full max-w-4xl mx-auto mt-6">
@@ -156,7 +176,32 @@ export default function GroupStageManagement() {
       <Card className="w-full max-w-md mx-auto">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-headline">
-            <PlusCircle className="h-6 w-6 text-primary" /> Create New Group
+            <Repeat className="h-6 w-6 text-primary" /> Create Random Groups
+          </CardTitle>
+          <CardDescription>
+            Automatically create a specified number of groups and randomly assign available teams to them. Matches will also be generated randomly.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-3">
+            <Input
+              type="number"
+              value={numRandomGroups}
+              onChange={(e) => setNumRandomGroups(e.target.value)}
+              placeholder="Number of groups"
+              min="1"
+            />
+            <Button onClick={handleCreateRandomGroups} aria-label="Create random groups">
+              <Repeat className="mr-2 h-4 w-4" /> Generate Random Groups
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+      
+      <Card className="w-full max-w-md mx-auto">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 font-headline">
+            <PlusCircle className="h-6 w-6 text-primary" /> Create New Group Manually
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -244,10 +289,10 @@ export default function GroupStageManagement() {
 
             {/* Match Generation & List */}
             <div className="p-4 border rounded-md bg-background">
-              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><Swords className="h-5 w-5 text-accent" /> Matches</h3>
-              {group.teamIds.length >= 2 && group.matches.length === 0 && (
-                 <Button onClick={() => handleGenerateMatches(group.id)} className="w-full mb-3" variant="outline" aria-label="Generate matches for group">
-                  Generate Matches
+              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><Swords className="h-5 w-5 text-accent" /> Matches (Random Order)</h3>
+              {group.teamIds.length >= 2 && (
+                 <Button onClick={() => handleGenerateMatches(group.id)} className="w-full mb-3" variant="outline" aria-label="Generate or Re-generate matches for group">
+                  {group.matches.length > 0 ? "Re-generate Matches (Random Order)" : "Generate Matches (Random Order)"}
                 </Button>
               )}
               {group.matches.length > 0 ? (

@@ -11,6 +11,16 @@ const initialState: TournamentState = {
   isInitialized: false,
 };
 
+// Fisher-Yates Shuffle Algorithm
+function shuffleArray<T>(array: T[]): T[] {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  }
+  return newArray;
+}
+
 function generateMatchesForGroup(teamIds: string[], allTeams: Team[]): Match[] {
   const matches: Match[] = [];
   if (teamIds.length < 2) return matches;
@@ -29,7 +39,7 @@ function generateMatchesForGroup(teamIds: string[], allTeams: Team[]): Match[] {
       });
     }
   }
-  return matches;
+  return shuffleArray(matches); // Shuffle the generated matches
 }
 
 function calculateGroupStandings(group: Group, allTeams: Team[]): GroupTeamStats[] {
@@ -279,6 +289,67 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         }
       }
       return { ...state, knockoutRounds: newKnockoutRounds };
+    }
+     case 'RANDOMLY_CREATE_GROUPS_AND_ASSIGN_TEAMS': {
+      const { numGroups, groupNamePrefix = "Group" } = action.payload;
+      const { teams } = state;
+
+      if (numGroups <= 0) {
+        toast({ title: "Error", description: "Number of groups must be greater than 0.", variant: "destructive" });
+        return state;
+      }
+      if (teams.length === 0 ) {
+        toast({ title: "Error", description: "No teams available to assign to groups. Please add teams first.", variant: "destructive" });
+        return state;
+      }
+      if (teams.length < numGroups) {
+        // This allows creating groups even if some might be empty or have fewer teams, 
+        // but usually, you'd want at least one team per group.
+        // Consider if this behavior is desired or if it should be an error.
+        // For now, let's ensure at least one team per group if numGroups > teams.length
+         toast({ title: "Error", description: `Not enough teams (have ${teams.length}) to create ${numGroups} groups with at least one team each.`, variant: "destructive" });
+        return state;
+      }
+
+      const shuffledTeams = shuffleArray([...teams]);
+      const newGroups: Group[] = [];
+      const teamsPerGroupBase = Math.floor(shuffledTeams.length / numGroups);
+      let remainderTeams = shuffledTeams.length % numGroups;
+      let currentTeamIndex = 0;
+
+      for (let i = 0; i < numGroups; i++) {
+        const teamsInThisGroupCount = teamsPerGroupBase + (remainderTeams > 0 ? 1 : 0);
+        if (remainderTeams > 0) {
+          remainderTeams--;
+        }
+        
+        const groupTeamIds = shuffledTeams.slice(currentTeamIndex, currentTeamIndex + teamsInThisGroupCount).map(t => t.id);
+        currentTeamIndex += teamsInThisGroupCount;
+
+        // If after distribution some groups would be empty and we have teams, this logic is flawed for that edge case
+        // However, the checks above (teams.length >= numGroups) should prevent empty groups if teams exist.
+        if (groupTeamIds.length === 0 && teams.length > 0) { 
+            // This case should ideally not be hit due to prior checks
+            // but as a safeguard, skip creating an empty group if other groups have teams.
+            continue;
+        }
+
+
+        const groupName = `${groupNamePrefix} ${String.fromCharCode(65 + i)}`; // Group A, Group B, etc.
+        const groupMatches = generateMatchesForGroup(groupTeamIds, state.teams);
+        
+        newGroups.push({
+          id: `group-${Date.now()}-${Math.random()}`,
+          name: groupName,
+          teamIds: groupTeamIds,
+          matches: groupMatches,
+        });
+      }
+      
+      return {
+        ...state,
+        groups: [...state.groups, ...newGroups],
+      };
     }
     case 'RESET_TOURNAMENT':
       if (typeof window !== 'undefined') {

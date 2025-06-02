@@ -64,4 +64,5 @@ export type TournamentAction =
   | { type: 'UPDATE_GROUP_MATCH_RESULT'; payload: { groupId: string; matchId: string; team1Score: number; team2Score: number } }
   | { type: 'CREATE_KNOCKOUT_STAGE'; payload: { numTeams: number, selectedTeamIds: string[] } }
   | { type: 'UPDATE_KNOCKOUT_MATCH_RESULT'; payload: { roundIndex: number; matchIndexInRound: number; team1Score: number; team2Score: number } }
-  | { type: 'RESET_TOURNAMENT' };
+  | { type: 'RESET_TOURNAMENT' }
+  | { type: 'RANDOMLY_CREATE_GROUPS_AND_ASSIGN_TEAMS'; payload: { numGroups: number; groupNamePrefix?: string } };
