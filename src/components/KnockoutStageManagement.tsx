@@ -2,15 +2,16 @@
 "use client";
 import React, { useState } from 'react';
 import { useTournamentState, useTournamentDispatch, useIsClient } from '@/components/TournamentContext';
-import type { KnockoutMatch, Team } from '@/types';
+import type { KnockoutMatch } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { GitFork, Save, Users, Trophy } from 'lucide-react'; // Added Trophy
+import { GitFork, Save, Trophy } from 'lucide-react';
 import { toast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { cn } from '@/lib/utils';
 
 interface KnockoutScoreInput {
   [matchId: string]: { team1Score: string; team2Score: string };
@@ -154,90 +155,132 @@ export default function KnockoutStageManagement() {
           <CardHeader>
             <CardTitle className="font-headline text-2xl text-primary">Knockout Bracket</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="flex space-x-4 overflow-x-auto pb-4">
+          <CardContent className="overflow-x-auto pb-6 pt-2"> {/* Added padding top */}
+            <div className="flex items-start space-x-8 min-w-max"> {/* Increased space-x for connector lines */}
               {knockoutRounds.map((round, roundIndex) => {
                 const isFinalRound = roundIndex === knockoutRounds.length - 1;
+                const isChampionshipRound = isFinalRound && round.length === 1;
+
                 return (
-                  <div key={`round-${roundIndex}`} className="min-w-[300px] space-y-4 flex-shrink-0">
-                    <h3 className="text-lg font-semibold text-center text-accent">
-                      {isFinalRound && round.length === 1 && round[0].team1Id && !round[0].team1Id.startsWith('winner-') && !round[0].team1Id.startsWith('placeholder-') && !round[0].team2Id ? 'Tournament Winner' : 
-                       isFinalRound ? 'Final' : 
+                  <div key={`round-${roundIndex}`} className="flex flex-col space-y-12 min-w-[280px] pt-10 relative"> {/* Increased space-y between matches, pt for round title */}
+                    <h3 className="text-lg font-semibold text-center text-accent absolute -top-0 left-0 right-0 whitespace-nowrap">
+                       {isChampionshipRound && round[0].played && (round[0].team1Score !== null && round[0].team2Score !== null && round[0].team1Score !== round[0].team2Score) ? 'Tournament Winner' :
+                       isChampionshipRound ? 'Final' : 
                        roundIndex === knockoutRounds.length - 2 ? 'Semi-Finals' : 
                        roundIndex === knockoutRounds.length - 3 ? 'Quarter-Finals' : 
                        `Round ${roundIndex + 1}`}
                     </h3>
-                    {round.map((match, matchIndex) => {
-                      const isFinalWinnerDisplay = isFinalRound && round.length === 1 && match.team1Id && !match.team1Id.startsWith('winner-') && !match.team1Id.startsWith('placeholder-') && !match.team2Id;
+                    
+                    <div className="space-y-16"> {/* Space for matches + their connectors */}
+                      {round.map((match, matchIndex) => {
+                        const isFinalWinnerDisplay = isChampionshipRound && match.played && match.team1Id && !match.team1Id.startsWith('winner-') && !match.team1Id.startsWith('placeholder-') && !match.team2Id && (match.team1Score !== null && match.team2Score !== null && match.team1Score !== match.team2Score);
                       
-                      const team1IsPlaceholder = !match.team1Id || match.team1Id.startsWith('winner-') || match.team1Id.startsWith('placeholder-');
-                      const team2IsPlaceholder = !match.team2Id || match.team2Id.startsWith('winner-') || match.team2Id.startsWith('placeholder-');
-                      const canEditScores = (!match.played || matchScores[match.id] !== undefined);
+                        const team1IsPlaceholder = !match.team1Id || match.team1Id.startsWith('winner-') || match.team1Id.startsWith('placeholder-');
+                        const team2IsPlaceholder = !match.team2Id || match.team2Id.startsWith('winner-') || match.team2Id.startsWith('placeholder-');
+                        const canEditScores = (!match.played || matchScores[match.id] !== undefined) && !team1IsPlaceholder && !team2IsPlaceholder;
 
-                      return (
-                        <Card key={match.id} className={`p-4 shadow-md ${match.played ? 'bg-green-50 dark:bg-green-900/30' : 'bg-background'}`}>
-                          {!isFinalWinnerDisplay && <p className="text-xs text-muted-foreground mb-2">Match {matchIndex + 1}</p>}
-                          
-                          {isFinalWinnerDisplay ? (
-                            <div className="text-center py-4">
-                              <Trophy className="h-12 w-12 text-amber-500 mx-auto mb-3" />
-                              <p className="text-xl font-bold text-primary">{getTeamName(match.team1Id)}</p>
-                              <p className="text-sm text-muted-foreground">Is the Champion!</p>
-                            </div>
-                          ) : (
-                            <div className="space-y-3">
-                              <div className="flex items-center justify-between">
-                                <span className={`font-medium text-sm truncate pr-2 ${match.played && match.team1Score !== null && match.team2Score !== null && match.team1Score > match.team2Score ? 'text-green-600 dark:text-green-400 font-bold' : 'text-foreground'}`}>
-                                  {getTeamName(match.team1Id, match.placeholder || `Team A`)}
-                                </span>
-                                 <Input
-                                  type="number"
-                                  min="0"
-                                  placeholder="-"
-                                  value={matchScores[match.id]?.team1Score ?? match.team1Score ?? ''}
-                                  onChange={(e) => handleScoreChange(match.id, 'team1', e.target.value)}
-                                  className="w-14 h-8 text-xs text-center"
-                                  disabled={!canEditScores || team1IsPlaceholder}
-                                />
-                              </div>
-                              
-                              <div className="text-center text-xs text-muted-foreground my-1">vs</div>
-                              
-                              <div className="flex items-center justify-between">
-                                 <span className={`font-medium text-sm truncate pr-2 ${match.played && match.team1Score !== null && match.team2Score !== null && match.team2Score > match.team1Score ? 'text-green-600 dark:text-green-400 font-bold' : 'text-foreground'}`}>
-                                   {getTeamName(match.team2Id, match.placeholder || `Team B`)}
-                                 </span>
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  placeholder="-"
-                                  value={matchScores[match.id]?.team2Score ?? match.team2Score ?? ''}
-                                  onChange={(e) => handleScoreChange(match.id, 'team2', e.target.value)}
-                                  className="w-14 h-8 text-xs text-center"
-                                  disabled={!canEditScores || team2IsPlaceholder}
-                                />
-                              </div>
+                        const winnerId = match.played && match.team1Score !== null && match.team2Score !== null ? (match.team1Score > match.team2Score ? match.team1Id : match.team2Score > match.team1Score ? match.team2Id : null) : null;
 
-                              {(team1IsPlaceholder || team2IsPlaceholder) ? (
-                                  <p className="text-xs text-muted-foreground text-center pt-2">Waiting for teams...</p>
-                                ): (
-                                  <Button
-                                    onClick={() => handleUpdateMatchResult(roundIndex, matchIndex, match.id)}
-                                    size="sm"
-                                    variant="outline"
-                                    className="w-full mt-3 h-8 text-xs"
-                                    disabled={!canEditScores || team1IsPlaceholder || team2IsPlaceholder}
-                                    aria-label="Save knockout match score"
+                        return (
+                          <div key={match.id} className="bg-card rounded-lg shadow-md relative isolate"> {/* isolate for z-index of lines */}
+                            
+                            {isFinalWinnerDisplay ? (
+                              <div className="text-center py-8 px-4">
+                                <Trophy className="h-16 w-16 text-amber-400 mx-auto mb-4" />
+                                <p className="text-2xl font-bold text-primary">{getTeamName(winnerId)}</p>
+                                <p className="text-md text-muted-foreground">Is the Champion!</p>
+                              </div>
+                            ) : (
+                              <div className="p-3 space-y-2">
+                                {/* Team 1 */}
+                                <div className="flex items-stretch">
+                                  <span 
+                                    className={cn(
+                                      "flex-1 py-2 px-3 text-sm font-medium truncate rounded-l-md",
+                                      winnerId === match.team1Id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+                                      team1IsPlaceholder && "italic text-foreground/50",
+                                      !team1IsPlaceholder && winnerId !== match.team1Id && "text-foreground"
+                                    )}
                                   >
-                                    <Save className="mr-1 h-3 w-3" /> {match.played && matchScores[match.id] === undefined ? 'Update Score' : 'Save Score'}
-                                  </Button>
-                                )
-                              }
-                            </div>
-                          )}
-                        </Card>
-                      );
-                    })}
+                                    {getTeamName(match.team1Id, match.placeholder || `Team A`)}
+                                  </span>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    placeholder="-"
+                                    value={matchScores[match.id]?.team1Score ?? match.team1Score ?? ''}
+                                    onChange={(e) => handleScoreChange(match.id, 'team1', e.target.value)}
+                                    className="w-16 h-auto text-sm text-center rounded-l-none rounded-r-md border-l-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                                    disabled={team1IsPlaceholder || (match.played && matchScores[match.id] === undefined)}
+                                  />
+                                </div>
+
+                                {/* Team 2 */}
+                                <div className="flex items-stretch">
+                                   <span 
+                                    className={cn(
+                                      "flex-1 py-2 px-3 text-sm font-medium truncate rounded-l-md",
+                                      winnerId === match.team2Id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+                                      team2IsPlaceholder && "italic text-foreground/50",
+                                      !team2IsPlaceholder && winnerId !== match.team2Id && "text-foreground"
+
+                                    )}
+                                   >
+                                     {getTeamName(match.team2Id, match.placeholder || `Team B`)}
+                                   </span>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    placeholder="-"
+                                    value={matchScores[match.id]?.team2Score ?? match.team2Score ?? ''}
+                                    onChange={(e) => handleScoreChange(match.id, 'team2', e.target.value)}
+                                    className="w-16 h-auto text-sm text-center rounded-l-none rounded-r-md border-l-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                                    disabled={team2IsPlaceholder || (match.played && matchScores[match.id] === undefined)}
+                                  />
+                                </div>
+
+                                {(team1IsPlaceholder || team2IsPlaceholder) && !isFinalWinnerDisplay && (
+                                    <p className="text-xs text-muted-foreground text-center pt-1">Waiting for teams...</p>
+                                  )}
+                                
+                                {!team1IsPlaceholder && !team2IsPlaceholder && !isFinalWinnerDisplay && (
+                                    <Button
+                                      onClick={() => handleUpdateMatchResult(roundIndex, matchIndex, match.id)}
+                                      size="sm"
+                                      variant="outline"
+                                      className="w-full mt-2 h-9 text-xs"
+                                      disabled={!canEditScores}
+                                      aria-label="Save knockout match score"
+                                    >
+                                      <Save className="mr-1 h-3 w-3" /> {match.played && matchScores[match.id] === undefined ? 'Update Score' : 'Save Score'}
+                                    </Button>
+                                  )
+                                }
+                              </div>
+                            )}
+                            {/* Connector lines (simplified) */}
+                            {!isChampionshipRound && ( /* No outgoing line from final match display */
+                              <>
+                                {/* Horizontal line pointing to the right */}
+                                <div className="absolute top-1/2 -right-4 transform -translate-y-1/2 w-4 h-px bg-border -z-10"></div>
+                                
+                                {/* If this match feeds into another one, draw part of the vertical connector */}
+                                { (roundIndex < knockoutRounds.length -1 && knockoutRounds[roundIndex+1][Math.floor(matchIndex/2)]) &&
+                                  (matchIndex % 2 === 0 ? ( // Upper match of a pair
+                                    <div className="absolute top-1/2 -right-4 transform  w-px bg-border -z-10" style={{height: 'calc(50% + 4rem)' /* Approx half match height + half spacing */, bottom: '0%'}}></div>
+                                  ) : ( // Lower match of a pair
+                                    <div className="absolute bottom-1/2 -right-4 transform w-px bg-border -z-10" style={{height: 'calc(50% + 4rem)' /* Approx half match height + half spacing */, top: '0%'}}></div>
+                                  ))
+                                }
+                              </>
+                            )}
+                             {roundIndex > 0 && !isFinalWinnerDisplay && ( /* Incoming line for matches not in the first round */
+                               <div className="absolute top-1/2 -left-4 transform -translate-y-1/2 w-4 h-px bg-border -z-10"></div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               })}
@@ -245,9 +288,10 @@ export default function KnockoutStageManagement() {
           </CardContent>
         </Card>
       )}
-       {knockoutRounds.length === 0 && (
+      {knockoutRounds.length === 0 && (
         <p className="text-muted-foreground text-center mt-6">No knockout bracket generated yet. Configure and create one above.</p>
       )}
     </div>
   );
 }
+
