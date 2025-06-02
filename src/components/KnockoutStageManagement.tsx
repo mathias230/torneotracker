@@ -17,33 +17,45 @@ interface KnockoutScoreInput {
   [matchId: string]: { team1Score: string; team2Score: string };
 }
 
+const roundOptions = [
+  { value: "2", label: "Final (2 Equipos)", teams: 2 },
+  { value: "4", label: "Semifinales (4 Equipos)", teams: 4 },
+  { value: "8", label: "Cuartos de Final (8 Equipos)", teams: 8 },
+  { value: "16", label: "Octavos de Final (16 Equipos)", teams: 16 },
+  { value: "32", label: "Dieciseisavos de Final (32 Equipos)", teams: 32 },
+];
+
 export default function KnockoutStageManagement() {
   const { teams, knockoutRounds } = useTournamentState();
   const dispatch = useTournamentDispatch();
-  const [numTeamsForBracket, setNumTeamsForBracket] = useState<string>('8');
+  const [startingRoundValue, setStartingRoundValue] = useState<string>('8'); // Default to Quarter-Finals (8 teams)
   const [selectedTeamsForBracket, setSelectedTeamsForBracket] = useState<string[]>([]);
   const [matchScores, setMatchScores] = useState<KnockoutScoreInput>({});
   const isClient = useIsClient();
 
   const handleCreateBracket = () => {
-    const numTeams = parseInt(numTeamsForBracket, 10);
+    const numTeams = parseInt(startingRoundValue, 10);
+    // Validation for power of 2 is implicitly handled by the select options.
+    // Explicit validation for numTeams is still good practice if values could come from elsewhere.
     if (isNaN(numTeams) || numTeams < 2 || (numTeams & (numTeams - 1)) !== 0) {
-      toast({ title: "Error", description: "Number of teams must be a power of 2 (e.g., 2, 4, 8, 16).", variant: "destructive" });
+      toast({ title: "Error", description: "El número de equipos para el cuadro debe ser una potencia de 2 (ej. 2, 4, 8, 16).", variant: "destructive" });
       return;
     }
+
     if (selectedTeamsForBracket.length === 0 && teams.length < numTeams) {
-       toast({ title: "Error", description: `Not enough teams created to form a ${numTeams}-team bracket. Please add more teams or select specific ones.`, variant: "destructive" });
+       toast({ title: "Error", description: `No hay suficientes equipos creados (${teams.length}) para formar un cuadro de ${numTeams} equipos. Añade más equipos o selecciónalos específicamente.`, variant: "destructive" });
       return;
     }
     if (selectedTeamsForBracket.length > 0 && selectedTeamsForBracket.length !== numTeams) {
-      toast({ title: "Error", description: `You selected ${selectedTeamsForBracket.length} teams, but the bracket requires ${numTeams} teams.`, variant: "destructive" });
+      toast({ title: "Error", description: `Seleccionaste ${selectedTeamsForBracket.length} equipos, pero el cuadro requiere ${numTeams} equipos para la ronda inicial elegida.`, variant: "destructive" });
       return;
     }
 
     const teamIdsToUse = selectedTeamsForBracket.length > 0 ? selectedTeamsForBracket : teams.slice(0, numTeams).map(t => t.id);
 
     dispatch({ type: 'CREATE_KNOCKOUT_STAGE', payload: { numTeams, selectedTeamIds: teamIdsToUse } });
-    toast({ title: "Success", description: `${numTeams}-team knockout bracket created.` });
+    const selectedRoundLabel = roundOptions.find(opt => opt.value === startingRoundValue)?.label || `${numTeams}-team`;
+    toast({ title: "Success", description: `Cuadro de eliminatorias (${selectedRoundLabel}) creado.` });
   };
 
   const handleScoreChange = (matchId: string, team: 'team1' | 'team2', value: string) => {
@@ -59,22 +71,22 @@ export default function KnockoutStageManagement() {
   const handleUpdateMatchResult = (roundIndex: number, matchIndexInRound: number, matchId: string) => {
     const scores = matchScores[matchId];
     if (!scores || scores.team1Score === undefined || scores.team2Score === undefined) {
-       toast({ title: "Error", description: "Please enter scores for both teams.", variant: "destructive" });
+       toast({ title: "Error", description: "Por favor, ingresa puntuaciones para ambos equipos.", variant: "destructive" });
       return;
     }
     const team1Score = parseInt(scores.team1Score, 10);
     const team2Score = parseInt(scores.team2Score, 10);
 
     if (isNaN(team1Score) || isNaN(team2Score) || team1Score < 0 || team2Score < 0) {
-      toast({ title: "Error", description: "Scores must be valid non-negative numbers.", variant: "destructive" });
+      toast({ title: "Error", description: "Las puntuaciones deben ser números válidos no negativos.", variant: "destructive" });
       return;
     }
     if (team1Score === team2Score) {
-      toast({ title: "Error", description: "Knockout matches cannot end in a draw. Please enter a winner.", variant: "destructive" });
+      toast({ title: "Error", description: "Los partidos de eliminación no pueden terminar en empate. Por favor, ingresa un ganador.", variant: "destructive" });
       return;
     }
     dispatch({ type: 'UPDATE_KNOCKOUT_MATCH_RESULT', payload: { roundIndex, matchIndexInRound, team1Score, team2Score } });
-    toast({ title: "Success", description: "Knockout match result updated." });
+    toast({ title: "Success", description: "Resultado del partido de eliminación actualizado." });
   };
   
   const getTeamName = (teamId: string | undefined, defaultName: string = 'TBD'): string => {
@@ -89,9 +101,11 @@ export default function KnockoutStageManagement() {
     );
   };
 
+  const currentRequiredTeams = parseInt(startingRoundValue, 10);
+
   if (!isClient) {
     return <Card className="w-full mx-auto mt-6">
-      <CardHeader><CardTitle>Loading Knockout Stage...</CardTitle></CardHeader>
+      <CardHeader><CardTitle>Cargando Fase de Eliminatorias...</CardTitle></CardHeader>
       <CardContent><div className="animate-pulse h-20 bg-muted rounded-md w-full"></div></CardContent>
     </Card>;
   }
@@ -101,30 +115,33 @@ export default function KnockoutStageManagement() {
       <Card className="w-full max-w-lg mx-auto">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-headline">
-            <GitFork className="h-6 w-6 text-primary" /> Setup Knockout Bracket
+            <GitFork className="h-6 w-6 text-primary" /> Configurar Cuadro de Eliminatorias
           </CardTitle>
           <CardDescription>
-            Configure the number of teams and select participants for the knockout stage.
+            Selecciona la ronda inicial y los participantes para la fase de eliminación.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label htmlFor="numTeamsSelect">Number of Teams for Bracket</Label>
-            <Select value={numTeamsForBracket} onValueChange={setNumTeamsForBracket}>
-              <SelectTrigger id="numTeamsSelect">
-                <SelectValue placeholder="Select number of teams" />
+            <Label htmlFor="startingRoundSelect">Ronda Inicial del Cuadro</Label>
+            <Select value={startingRoundValue} onValueChange={setStartingRoundValue}>
+              <SelectTrigger id="startingRoundSelect">
+                <SelectValue placeholder="Selecciona la ronda inicial" />
               </SelectTrigger>
               <SelectContent>
-                {[2, 4, 8, 16, 32].map(num => (
-                  <SelectItem key={num} value={String(num)}>{num} Teams</SelectItem>
+                {roundOptions.map(opt => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           
           <div>
-            <Label className="font-semibold">Select Teams (Optional - if fewer than total teams or specific seeding)</Label>
-            <CardDescription className="text-xs mb-2">If no teams are selected, the first {numTeamsForBracket} teams from the general list will be used. Ensure you select exactly {numTeamsForBracket} teams if you choose this option.</CardDescription>
+            <Label className="font-semibold">Seleccionar Equipos (Opcional)</Label>
+            <CardDescription className="text-xs mb-2">
+              Si no seleccionas equipos, se usarán los primeros {currentRequiredTeams} equipos de la lista general. 
+              Asegúrate de seleccionar exactamente {currentRequiredTeams} equipos si eliges esta opción.
+            </CardDescription>
             <div className="max-h-48 overflow-y-auto space-y-2 p-2 border rounded-md">
               {teams.length > 0 ? teams.map(team => (
                 <div key={team.id} className="flex items-center space-x-2">
@@ -137,15 +154,15 @@ export default function KnockoutStageManagement() {
                     {team.name}
                   </Label>
                 </div>
-              )) : <p className="text-xs text-muted-foreground">No teams created yet.</p>}
+              )) : <p className="text-xs text-muted-foreground">Aún no se han creado equipos.</p>}
             </div>
              {selectedTeamsForBracket.length > 0 && (
-              <p className="text-xs mt-1 text-muted-foreground">Selected {selectedTeamsForBracket.length} of {numTeamsForBracket} teams.</p>
+              <p className="text-xs mt-1 text-muted-foreground">Seleccionados {selectedTeamsForBracket.length} de {currentRequiredTeams} equipos.</p>
             )}
           </div>
 
-          <Button onClick={handleCreateBracket} className="w-full" aria-label="Create or Re-create Knockout Bracket">
-            Create / Re-create Bracket
+          <Button onClick={handleCreateBracket} className="w-full" aria-label="Crear o Recrear Cuadro de Eliminatorias">
+            Crear / Recrear Cuadro
           </Button>
         </CardContent>
       </Card>
@@ -153,25 +170,30 @@ export default function KnockoutStageManagement() {
       {knockoutRounds.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="font-headline text-2xl text-primary">Knockout Bracket</CardTitle>
+            <CardTitle className="font-headline text-2xl text-primary">Cuadro de Eliminatorias</CardTitle>
           </CardHeader>
-          <CardContent className="overflow-x-auto pb-6 pt-2"> {/* Added padding top */}
-            <div className="flex items-start space-x-8 min-w-max"> {/* Increased space-x for connector lines */}
+          <CardContent className="overflow-x-auto pb-6 pt-2">
+            <div className="flex items-start space-x-8 min-w-max">
               {knockoutRounds.map((round, roundIndex) => {
                 const isFinalRound = roundIndex === knockoutRounds.length - 1;
                 const isChampionshipRound = isFinalRound && round.length === 1;
+                let roundTitle = `Ronda ${roundIndex + 1}`;
+                if (knockoutRounds.length === 1 && round.length ===1) roundTitle = "Final"; // Only one round which is the final
+                else if (isChampionshipRound && round[0].played && (round[0].team1Score !== null && round[0].team2Score !== null && round[0].team1Score !== round[0].team2Score)) roundTitle = 'Campeón del Torneo';
+                else if (isChampionshipRound) roundTitle = 'Final';
+                else if (knockoutRounds.length > 1 && roundIndex === knockoutRounds.length - 2) roundTitle = 'Semifinales';
+                else if (knockoutRounds.length > 2 && roundIndex === knockoutRounds.length - 3) roundTitle = 'Cuartos de Final';
+                else if (knockoutRounds.length > 3 && roundIndex === knockoutRounds.length - 4) roundTitle = 'Octavos de Final';
+                else if (knockoutRounds.length > 4 && roundIndex === knockoutRounds.length - 5) roundTitle = 'Dieciseisavos de Final';
+
 
                 return (
-                  <div key={`round-${roundIndex}`} className="flex flex-col space-y-12 min-w-[280px] pt-10 relative"> {/* Increased space-y between matches, pt for round title */}
+                  <div key={`round-${roundIndex}`} className="flex flex-col space-y-12 min-w-[280px] pt-10 relative">
                     <h3 className="text-lg font-semibold text-center text-accent absolute -top-0 left-0 right-0 whitespace-nowrap">
-                       {isChampionshipRound && round[0].played && (round[0].team1Score !== null && round[0].team2Score !== null && round[0].team1Score !== round[0].team2Score) ? 'Tournament Winner' :
-                       isChampionshipRound ? 'Final' : 
-                       roundIndex === knockoutRounds.length - 2 ? 'Semi-Finals' : 
-                       roundIndex === knockoutRounds.length - 3 ? 'Quarter-Finals' : 
-                       `Round ${roundIndex + 1}`}
+                       {roundTitle}
                     </h3>
                     
-                    <div className="space-y-16"> {/* Space for matches + their connectors */}
+                    <div className="space-y-16">
                       {round.map((match, matchIndex) => {
                         const isFinalWinnerDisplay = isChampionshipRound && match.played && match.team1Id && !match.team1Id.startsWith('winner-') && !match.team1Id.startsWith('placeholder-') && !match.team2Id && (match.team1Score !== null && match.team2Score !== null && match.team1Score !== match.team2Score);
                       
@@ -182,13 +204,13 @@ export default function KnockoutStageManagement() {
                         const winnerId = match.played && match.team1Score !== null && match.team2Score !== null ? (match.team1Score > match.team2Score ? match.team1Id : match.team2Score > match.team1Score ? match.team2Id : null) : null;
 
                         return (
-                          <div key={match.id} className="bg-card rounded-lg shadow-md relative isolate"> {/* isolate for z-index of lines */}
+                          <div key={match.id} className="bg-card rounded-lg shadow-md relative isolate">
                             
                             {isFinalWinnerDisplay ? (
                               <div className="text-center py-8 px-4">
                                 <Trophy className="h-16 w-16 text-amber-400 mx-auto mb-4" />
                                 <p className="text-2xl font-bold text-primary">{getTeamName(winnerId)}</p>
-                                <p className="text-md text-muted-foreground">Is the Champion!</p>
+                                <p className="text-md text-muted-foreground">¡Es el Campeón!</p>
                               </div>
                             ) : (
                               <div className="p-3 space-y-2">
@@ -202,7 +224,7 @@ export default function KnockoutStageManagement() {
                                       !team1IsPlaceholder && winnerId !== match.team1Id && "text-foreground"
                                     )}
                                   >
-                                    {getTeamName(match.team1Id, match.placeholder || `Team A`)}
+                                    {getTeamName(match.team1Id, match.placeholder || (match.roundIndex === 0 ? `Equipo ${match.matchIndexInRound * 2 + 1}`: `Ganador Partido ${String.fromCharCode(65 + match.matchIndexInRound * 2)}`))}
                                   </span>
                                   <Input
                                     type="number"
@@ -226,7 +248,7 @@ export default function KnockoutStageManagement() {
 
                                     )}
                                    >
-                                     {getTeamName(match.team2Id, match.placeholder || `Team B`)}
+                                     {getTeamName(match.team2Id, match.placeholder || (match.roundIndex === 0 ? `Equipo ${match.matchIndexInRound * 2 + 2}`: `Ganador Partido ${String.fromCharCode(65 + match.matchIndexInRound * 2 + 1)}`))}
                                    </span>
                                   <Input
                                     type="number"
@@ -240,7 +262,7 @@ export default function KnockoutStageManagement() {
                                 </div>
 
                                 {(team1IsPlaceholder || team2IsPlaceholder) && !isFinalWinnerDisplay && (
-                                    <p className="text-xs text-muted-foreground text-center pt-1">Waiting for teams...</p>
+                                    <p className="text-xs text-muted-foreground text-center pt-1">Esperando equipos...</p>
                                   )}
                                 
                                 {!team1IsPlaceholder && !team2IsPlaceholder && !isFinalWinnerDisplay && (
@@ -250,31 +272,28 @@ export default function KnockoutStageManagement() {
                                       variant="outline"
                                       className="w-full mt-2 h-9 text-xs"
                                       disabled={!canEditScores}
-                                      aria-label="Save knockout match score"
+                                      aria-label="Guardar resultado del partido de eliminación"
                                     >
-                                      <Save className="mr-1 h-3 w-3" /> {match.played && matchScores[match.id] === undefined ? 'Update Score' : 'Save Score'}
+                                      <Save className="mr-1 h-3 w-3" /> {match.played && matchScores[match.id] === undefined ? 'Actualizar Resultado' : 'Guardar Resultado'}
                                     </Button>
                                   )
                                 }
                               </div>
                             )}
                             {/* Connector lines (simplified) */}
-                            {!isChampionshipRound && ( /* No outgoing line from final match display */
+                            {!isChampionshipRound && ( 
                               <>
-                                {/* Horizontal line pointing to the right */}
                                 <div className="absolute top-1/2 -right-4 transform -translate-y-1/2 w-4 h-px bg-border -z-10"></div>
-                                
-                                {/* If this match feeds into another one, draw part of the vertical connector */}
                                 { (roundIndex < knockoutRounds.length -1 && knockoutRounds[roundIndex+1][Math.floor(matchIndex/2)]) &&
-                                  (matchIndex % 2 === 0 ? ( // Upper match of a pair
-                                    <div className="absolute top-1/2 -right-4 transform  w-px bg-border -z-10" style={{height: 'calc(50% + 4rem)' /* Approx half match height + half spacing */, bottom: '0%'}}></div>
-                                  ) : ( // Lower match of a pair
-                                    <div className="absolute bottom-1/2 -right-4 transform w-px bg-border -z-10" style={{height: 'calc(50% + 4rem)' /* Approx half match height + half spacing */, top: '0%'}}></div>
+                                  (matchIndex % 2 === 0 ? ( 
+                                    <div className="absolute top-1/2 -right-4 transform  w-px bg-border -z-10" style={{height: 'calc(50% + 4rem)' , bottom: '0%'}}></div>
+                                  ) : ( 
+                                    <div className="absolute bottom-1/2 -right-4 transform w-px bg-border -z-10" style={{height: 'calc(50% + 4rem)' , top: '0%'}}></div>
                                   ))
                                 }
                               </>
                             )}
-                             {roundIndex > 0 && !isFinalWinnerDisplay && ( /* Incoming line for matches not in the first round */
+                             {roundIndex > 0 && !isFinalWinnerDisplay && ( 
                                <div className="absolute top-1/2 -left-4 transform -translate-y-1/2 w-4 h-px bg-border -z-10"></div>
                             )}
                           </div>
@@ -289,9 +308,8 @@ export default function KnockoutStageManagement() {
         </Card>
       )}
       {knockoutRounds.length === 0 && (
-        <p className="text-muted-foreground text-center mt-6">No knockout bracket generated yet. Configure and create one above.</p>
+        <p className="text-muted-foreground text-center mt-6">Aún no se ha generado un cuadro de eliminatorias. Configura y crea uno arriba.</p>
       )}
     </div>
   );
 }
-
