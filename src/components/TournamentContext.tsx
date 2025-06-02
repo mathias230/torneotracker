@@ -1,3 +1,4 @@
+
 "use client";
 import type { Dispatch } from 'react';
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
@@ -233,14 +234,14 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
             id: `ko-r${roundIndex}-m${i}-${Date.now()}`,
             team1Id: team1Id,
             team2Id: team2Id,
-            team1Name: team1?.name || (team1Id.startsWith('placeholder') ? `Team ${i*2+1}`: 'TBD'),
-            team2Name: team2?.name || (team2Id.startsWith('placeholder') ? `Team ${i*2+2}`: 'TBD'),
+            team1Name: team1?.name || (typeof team1Id === 'string' && team1Id.startsWith('placeholder-') ? `Team ${i*2+1}`: 'TBD'),
+            team2Name: team2?.name || (typeof team2Id === 'string' && team2Id.startsWith('placeholder-') ? `Team ${i*2+2}`: 'TBD'),
             team1Score: null,
             team2Score: null,
             played: false,
             roundIndex,
             matchIndexInRound: i,
-            placeholder: !team1 || !team2 ? "Waiting for teams" : undefined,
+            placeholder: (!team1Id || team1Id.startsWith('winner-') || team1Id.startsWith('placeholder-') || !team2Id || team2Id.startsWith('winner-') || team2Id.startsWith('placeholder-')) ? "Waiting for teams" : undefined,
           });
         }
         rounds.push(roundMatches);
@@ -261,7 +262,7 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
       const newKnockoutRounds = state.knockoutRounds.map(r => r.map(m => ({...m}))); // Deep copy
 
       const match = newKnockoutRounds[roundIndex]?.[matchIndexInRound];
-      if (!match) return state;
+      if (!match || !match.team1Id || !match.team2Id) return state; // Ensure match and team IDs exist
 
       match.team1Score = team1Score;
       match.team2Score = team2Score;
@@ -270,21 +271,38 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
       // Advance winner to next round
       if (roundIndex < newKnockoutRounds.length - 1) {
         const winnerId = team1Score > team2Score ? match.team1Id : match.team2Id;
-        const winner = state.teams.find(t => t.id === winnerId) || { id: winnerId, name: winnerId.startsWith('winner-') || winnerId.startsWith('placeholder-') ? 'TBD' : `Winner of ${match.team1Name} vs ${match.team2Name}`};
         
+        let winnerName = 'TBD';
+        const foundWinnerTeam = state.teams.find(t => t.id === winnerId);
+        if (foundWinnerTeam) {
+            winnerName = foundWinnerTeam.name;
+        } else if (typeof winnerId === 'string' && (winnerId.startsWith('winner-') || winnerId.startsWith('placeholder-'))) {
+            // If the winnerId itself is a placeholder, the name remains 'TBD' or could be more specific
+            // For now, using a generic approach or what was in match if available.
+            // This part might need refinement if specific placeholder names are desired for winners of placeholders.
+            winnerName = (team1Score > team2Score ? match.team1Name : match.team2Name) || 'TBD';
+        } else {
+            winnerName = `Winner of ${match.team1Name || 'match'} vs ${match.team2Name || 'match'}`;
+        }
+
+
         const nextRoundMatchIndex = Math.floor(matchIndexInRound / 2);
         const nextMatch = newKnockoutRounds[roundIndex + 1]?.[nextRoundMatchIndex];
 
         if (nextMatch) {
           if (matchIndexInRound % 2 === 0) { // This match is the first in a pair for the next round match
-            nextMatch.team1Id = winner.id;
-            nextMatch.team1Name = winner.name;
+            nextMatch.team1Id = winnerId;
+            nextMatch.team1Name = winnerName;
           } else { // This match is the second in a pair
-            nextMatch.team2Id = winner.id;
-            nextMatch.team2Name = winner.name;
+            nextMatch.team2Id = winnerId;
+            nextMatch.team2Name = winnerName;
           }
-          if (nextMatch.team1Id && !nextMatch.team1Id.startsWith('winner-') && !nextMatch.team1Id.startsWith('placeholder-') && nextMatch.team2Id && !nextMatch.team2Id.startsWith('winner-') && !nextMatch.team2Id.startsWith('placeholder-')) {
+          // Update placeholder state for the next match
+           if (nextMatch.team1Id && !nextMatch.team1Id.startsWith('winner-') && !nextMatch.team1Id.startsWith('placeholder-') &&
+               nextMatch.team2Id && !nextMatch.team2Id.startsWith('winner-') && !nextMatch.team2Id.startsWith('placeholder-')) {
             nextMatch.placeholder = undefined;
+          } else {
+            nextMatch.placeholder = "Waiting for teams";
           }
         }
       }
@@ -303,10 +321,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         return state;
       }
       if (teams.length < numGroups) {
-        // This allows creating groups even if some might be empty or have fewer teams, 
-        // but usually, you'd want at least one team per group.
-        // Consider if this behavior is desired or if it should be an error.
-        // For now, let's ensure at least one team per group if numGroups > teams.length
          toast({ title: "Error", description: `Not enough teams (have ${teams.length}) to create ${numGroups} groups with at least one team each.`, variant: "destructive" });
         return state;
       }
@@ -326,14 +340,9 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         const groupTeamIds = shuffledTeams.slice(currentTeamIndex, currentTeamIndex + teamsInThisGroupCount).map(t => t.id);
         currentTeamIndex += teamsInThisGroupCount;
 
-        // If after distribution some groups would be empty and we have teams, this logic is flawed for that edge case
-        // However, the checks above (teams.length >= numGroups) should prevent empty groups if teams exist.
         if (groupTeamIds.length === 0 && teams.length > 0) { 
-            // This case should ideally not be hit due to prior checks
-            // but as a safeguard, skip creating an empty group if other groups have teams.
             continue;
         }
-
 
         const groupName = `${groupNamePrefix} ${String.fromCharCode(65 + i)}`; // Group A, Group B, etc.
         const groupMatches = generateMatchesForGroup(groupTeamIds, state.teams);
@@ -348,7 +357,13 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
       
       return {
         ...state,
-        groups: [...state.groups, ...newGroups],
+        // Replace existing groups if we want to reset them, or add to them.
+        // For now, let's add to existing ones, but typically random creation might imply clearing old ones.
+        // Decision: Clear existing groups if this action is called, or add a separate "clear groups" action.
+        // For now, it appends. This could be confusing.
+        // Let's make it replace the groups of type "Random Group X" if they exist, or just add if no name collision.
+        // Simpler: just add. User can delete old ones.
+        groups: [...state.groups, ...newGroups], 
       };
     }
     case 'RESET_TOURNAMENT':
@@ -392,7 +407,6 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [state]);
 
   if (!state.isInitialized) {
-     // You could return a loading spinner here
     return <div className="flex justify-center items-center h-screen"><p>Loading tournament data...</p></div>;
   }
 
@@ -410,7 +424,6 @@ export const useTournamentState = () => {
   if (context === undefined) {
     throw new Error('useTournamentState must be used within a TournamentProvider');
   }
-  // Expose helper functions or selectors here if needed, e.g., for calculating standings
   const getTeamById = (teamId: string): Team | undefined => context.teams.find(t => t.id === teamId);
   
   const getGroupStandings = (groupId: string): GroupTeamStats[] => {
@@ -430,9 +443,10 @@ export const useTournamentDispatch = () => {
   return context;
 };
 
-// Helper to ensure component using this does not render SSR if it depends on localStorage state
 export const useIsClient = () => {
   const [isClient, setIsClient] = React.useState(false);
   useEffect(() => setIsClient(true), []);
   return isClient;
 }
+
+    
