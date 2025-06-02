@@ -35,8 +35,6 @@ export default function KnockoutStageManagement() {
 
   const handleCreateBracket = () => {
     const numTeams = parseInt(startingRoundValue, 10);
-    // Validation for power of 2 is implicitly handled by the select options.
-    // Explicit validation for numTeams is still good practice if values could come from elsewhere.
     if (isNaN(numTeams) || numTeams < 2 || (numTeams & (numTeams - 1)) !== 0) {
       toast({ title: "Error", description: "El número de equipos para el cuadro debe ser una potencia de 2 (ej. 2, 4, 8, 16).", variant: "destructive" });
       return;
@@ -177,14 +175,31 @@ export default function KnockoutStageManagement() {
               {knockoutRounds.map((round, roundIndex) => {
                 const isFinalRound = roundIndex === knockoutRounds.length - 1;
                 const isChampionshipRound = isFinalRound && round.length === 1;
+                const currentRoundMatchForTitle = round.length > 0 ? round[0] : null;
+
                 let roundTitle = `Ronda ${roundIndex + 1}`;
-                if (knockoutRounds.length === 1 && round.length ===1) roundTitle = "Final"; // Only one round which is the final
-                else if (isChampionshipRound && round[0].played && (round[0].team1Score !== null && round[0].team2Score !== null && round[0].team1Score !== round[0].team2Score)) roundTitle = 'Campeón del Torneo';
-                else if (isChampionshipRound) roundTitle = 'Final';
-                else if (knockoutRounds.length > 1 && roundIndex === knockoutRounds.length - 2) roundTitle = 'Semifinales';
-                else if (knockoutRounds.length > 2 && roundIndex === knockoutRounds.length - 3) roundTitle = 'Cuartos de Final';
-                else if (knockoutRounds.length > 3 && roundIndex === knockoutRounds.length - 4) roundTitle = 'Octavos de Final';
-                else if (knockoutRounds.length > 4 && roundIndex === knockoutRounds.length - 5) roundTitle = 'Dieciseisavos de Final';
+
+                if (knockoutRounds.length === 1 && round.length === 1) { // Single round tournament (e.g. Final directly)
+                  if (currentRoundMatchForTitle && currentRoundMatchForTitle.played && currentRoundMatchForTitle.team1Score !== null && currentRoundMatchForTitle.team2Score !== null && currentRoundMatchForTitle.team1Score !== currentRoundMatchForTitle.team2Score) {
+                    roundTitle = 'Campeón del Torneo';
+                  } else {
+                    roundTitle = "Final";
+                  }
+                } else if (isChampionshipRound) { // This is the final match of a multi-round bracket
+                   if (currentRoundMatchForTitle && currentRoundMatchForTitle.played && currentRoundMatchForTitle.team1Score !== null && currentRoundMatchForTitle.team2Score !== null && currentRoundMatchForTitle.team1Score !== currentRoundMatchForTitle.team2Score) {
+                    roundTitle = 'Campeón del Torneo';
+                  } else {
+                    roundTitle = 'Final';
+                  }
+                } else if (knockoutRounds.length > 1 && roundIndex === knockoutRounds.length - 2) {
+                  roundTitle = 'Semifinales';
+                } else if (knockoutRounds.length > 2 && roundIndex === knockoutRounds.length - 3) {
+                  roundTitle = 'Cuartos de Final';
+                } else if (knockoutRounds.length > 3 && roundIndex === knockoutRounds.length - 4) {
+                  roundTitle = 'Octavos de Final';
+                } else if (knockoutRounds.length > 4 && roundIndex === knockoutRounds.length - 5) {
+                  roundTitle = 'Dieciseisavos de Final';
+                }
 
 
                 return (
@@ -219,9 +234,10 @@ export default function KnockoutStageManagement() {
                                   <span 
                                     className={cn(
                                       "flex-1 py-2 px-3 text-sm font-medium truncate rounded-l-md",
-                                      winnerId === match.team1Id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+                                      winnerId === match.team1Id ? "bg-primary text-primary-foreground" : "bg-muted",
                                       team1IsPlaceholder && "italic text-foreground/50",
-                                      !team1IsPlaceholder && winnerId !== match.team1Id && "text-foreground"
+                                      !team1IsPlaceholder && winnerId !== match.team1Id && "text-foreground",
+                                      !team1IsPlaceholder && winnerId === match.team1Id && "font-bold"
                                     )}
                                   >
                                     {getTeamName(match.team1Id, match.placeholder || (match.roundIndex === 0 ? `Equipo ${match.matchIndexInRound * 2 + 1}`: `Ganador Partido ${String.fromCharCode(65 + match.matchIndexInRound * 2)}`))}
@@ -242,10 +258,10 @@ export default function KnockoutStageManagement() {
                                    <span 
                                     className={cn(
                                       "flex-1 py-2 px-3 text-sm font-medium truncate rounded-l-md",
-                                      winnerId === match.team2Id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+                                      winnerId === match.team2Id ? "bg-primary text-primary-foreground" : "bg-muted",
                                       team2IsPlaceholder && "italic text-foreground/50",
-                                      !team2IsPlaceholder && winnerId !== match.team2Id && "text-foreground"
-
+                                      !team2IsPlaceholder && winnerId !== match.team2Id && "text-foreground",
+                                      !team2IsPlaceholder && winnerId === match.team2Id && "font-bold"
                                     )}
                                    >
                                      {getTeamName(match.team2Id, match.placeholder || (match.roundIndex === 0 ? `Equipo ${match.matchIndexInRound * 2 + 2}`: `Ganador Partido ${String.fromCharCode(65 + match.matchIndexInRound * 2 + 1)}`))}
@@ -313,3 +329,4 @@ export default function KnockoutStageManagement() {
     </div>
   );
 }
+
