@@ -102,16 +102,16 @@ export default function KnockoutStageManagement() {
   const currentRequiredTeams = parseInt(startingRoundValue, 10);
 
   // Calculate effective number of playable rounds for title logic
-  let numEffectiveRounds = knockoutRounds.length;
+  let numEffectiveRounds = 0;
   if (knockoutRounds.length > 0) {
-    const lastRoundInArray = knockoutRounds[knockoutRounds.length - 1];
-    if (
-      knockoutRounds.length > 1 &&
-      lastRoundInArray.length === 1 &&
-      lastRoundInArray[0].team1Id &&
-      lastRoundInArray[0].team2Id === undefined // Key indicator of a champion slot
-    ) {
-      numEffectiveRounds--;
+    // If the last round in the array is structured like a champion slot (1 match, no team2Id),
+    // then the number of playable rounds is one less than the total length.
+    // Otherwise, all rounds are considered playable (e.g., a 2-team bracket where the final *is* the championship).
+    const lastRoundData = knockoutRounds[knockoutRounds.length - 1];
+    if (knockoutRounds.length > 1 && lastRoundData.length === 1 && lastRoundData[0].team2Id === undefined) {
+      numEffectiveRounds = knockoutRounds.length - 1;
+    } else {
+      numEffectiveRounds = knockoutRounds.length;
     }
   }
   const finalPlayableRoundIndex = numEffectiveRounds > 0 ? numEffectiveRounds - 1 : -1;
@@ -193,24 +193,24 @@ export default function KnockoutStageManagement() {
                 let roundTitle = `Ronda ${roundIndex + 1}`; // Default title
                 const currentMatchForTitle = round.length > 0 ? round[0] : null;
 
-                const isCurrentRoundChampionDisplay = 
-                    roundIndex === finalPlayableRoundIndex + 1 && // Is the round *after* the last playable one
-                    numEffectiveRounds > 0 && // Ensure there was at least one playable round
-                    round.length === 1 && 
-                    currentMatchForTitle?.team1Id && 
-                    currentMatchForTitle?.team2Id === undefined && 
-                    currentMatchForTitle?.played;
+                // Determine if this round is the designated champion display slot
+                const isDesignatedChampionSlot = 
+                    numEffectiveRounds > 0 &&
+                    roundIndex === finalPlayableRoundIndex + 1 && // This is the round *after* the last playable one
+                    knockoutRounds.length === numEffectiveRounds + 1 && // Bracket has a dedicated champion slot
+                    round.length === 1 &&
+                    currentMatchForTitle?.team2Id === undefined;
 
-                if (isCurrentRoundChampionDisplay) {
+                if (isDesignatedChampionSlot) {
                     roundTitle = 'Campeón del Torneo';
                 } else if (roundIndex === finalPlayableRoundIndex) {
                     // This is the final playable round
                     if (currentMatchForTitle && currentMatchForTitle.played && 
                         currentMatchForTitle.team1Score !== null && currentMatchForTitle.team2Score !== null && 
                         currentMatchForTitle.team1Score !== currentMatchForTitle.team2Score &&
-                        knockoutRounds.length === numEffectiveRounds // No separate champion slot follows this
+                        numEffectiveRounds === 1 // Final match decided the champ, and it's a 2-team bracket
                         ) {
-                      roundTitle = 'Campeón del Torneo'; // Final match decided the champ, and it's the last visual round
+                      roundTitle = 'Campeón del Torneo'; 
                     } else {
                       roundTitle = "Final";
                     }
@@ -223,9 +223,8 @@ export default function KnockoutStageManagement() {
                 } else if (finalPlayableRoundIndex >=0 && roundIndex === finalPlayableRoundIndex - 4) {
                     roundTitle = "Dieciseisavos de Final";
                 }
-                // Fallback to "Ronda X" if none of the above match (e.g., for very large brackets or if finalPlayableRoundIndex is -1)
-
-                const isVisuallyChampionRound = (roundTitle === 'Campeón del Torneo' && round.length === 1 && currentMatchForTitle?.team1Id && !currentMatchForTitle?.team2Id);
+                
+                const isVisuallyChampionRound = (isDesignatedChampionSlot || (roundTitle === 'Campeón del Torneo' && roundIndex === finalPlayableRoundIndex && numEffectiveRounds === 1));
 
                 return (
                   <div key={`round-${roundIndex}`} className="flex flex-col space-y-12 min-w-[280px] pt-10 relative">
@@ -279,7 +278,7 @@ export default function KnockoutStageManagement() {
                                 </div>
 
                                 {/* Team 2 */}
-                                {!match.team2Id && match.team1Id && !team1IsPlaceholder && isVisuallyChampionRound ? null : ( // Hide team 2 for champion display
+                                {(!match.team2Id && match.team1Id && !team1IsPlaceholder && isVisuallyChampionRound) ? null : ( 
                                 <div className="flex items-stretch">
                                    <span 
                                     className={cn(
@@ -337,7 +336,7 @@ export default function KnockoutStageManagement() {
                                 }
                               </>
                             )}
-                             {roundIndex > 0 && !isFinalWinnerDisplay && ( 
+                             {roundIndex > 0 && !isVisuallyChampionRound && ( 
                                <div className="absolute top-1/2 -left-4 transform -translate-y-1/2 w-4 h-px bg-border -z-10"></div>
                             )}
                           </div>
