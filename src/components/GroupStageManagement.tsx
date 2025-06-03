@@ -434,7 +434,9 @@ export default function GroupStageManagement() {
         <p className="text-muted-foreground text-center mt-6">Aún no se han creado grupos. Crea un grupo para gestionar equipos y partidos.</p>
       )}
 
-      {groups.map((group) => (
+      {groups.map((group) => {
+        const groupIdentifier = group.name.replace(/^Grupo (Aleatorio )?/, '');
+        return (
         <Card key={group.id} className="w-full max-w-4xl mx-auto shadow-lg">
           <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
             <div className="flex-grow">
@@ -554,7 +556,7 @@ export default function GroupStageManagement() {
 
             <div className="p-4 border rounded-md bg-background" ref={el => groupTableRefs.current[group.id] = el}>
               <div className="flex justify-between items-center mb-3">
-                <h3 className="text-lg font-semibold flex items-center gap-2"><ListChecks className="h-5 w-5 text-accent" /> Clasificación del Grupo</h3>
+                <h3 className="text-lg font-semibold flex items-center gap-2"><ListChecks className="h-5 w-5 text-accent" /> {`Clasificación del Grupo ${groupIdentifier}`}</h3>
                  <Button 
                     onClick={() => handleGroupTableExport(group)} 
                     variant="outline" 
@@ -680,7 +682,7 @@ export default function GroupStageManagement() {
             </div>
           </CardContent>
         </Card>
-      ))}
+      )})}
 
        <Dialog open={isZoneModalOpen} onOpenChange={(isOpen) => {
         setIsZoneModalOpen(isOpen);
