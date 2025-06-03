@@ -4,6 +4,8 @@ import type { Dispatch } from 'react';
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import type { TournamentState, TournamentAction, Team, Group, Match, GroupTeamStats, KnockoutMatch, League, LeagueZoneSetting } from '@/types';
 import { toast } from "@/hooks/use-toast";
+import { db } from '@/lib/firebaseConfig'; // Importar la instancia de Firestore
+import { doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 
 const initialState: TournamentState = {
   teams: [],
@@ -123,14 +125,41 @@ function calculateStandings(
   });
 }
 
+// Helper para escribir todo el estado del torneo a Firestore
+// Usaremos un ID de torneo fijo por ahora: "default_tournament"
+const TOURNAMENT_DOC_PATH = "tournaments_shared/default_tournament";
+
+const saveTournamentStateToFirestore = async (state: TournamentState) => {
+  try {
+    // No guardamos 'isInitialized' en Firestore
+    const { isInitialized, ...stateToSave } = state;
+    const tournamentDocRef = doc(db, TOURNAMENT_DOC_PATH);
+    await setDoc(tournamentDocRef, stateToSave);
+    console.log("Tournament state saved to Firestore");
+  } catch (error) {
+    console.error("Error saving tournament state to Firestore:", error);
+    toast({
+      title: "Error de Sincronización",
+      description: "No se pudo guardar el estado del torneo en la nube.",
+      variant: "destructive",
+    });
+  }
+};
+
 
 const tournamentReducer = (state: TournamentState, action: TournamentAction): TournamentState => {
+  let newState = state;
   switch (action.type) {
     case 'INITIALIZE_STATE':
       return { ...action.payload, isInitialized: true };
-    case 'ADD_TEAM':
+    case 'ADD_TEAM': {
       const newTeam: Team = { id: `team-${Date.now()}`, name: action.payload.name };
-      return { ...state, teams: [...state.teams, newTeam] };
+      newState = { ...state, teams: [...state.teams, newTeam] };
+      // Firestore: Añadir el nuevo equipo.
+      // Para simplificar, guardaremos todo el estado después de cada cambio relevante.
+      // Podríamos optimizar para solo escribir el delta, pero esto es más robusto para empezar.
+      break;
+    }
     case 'DELETE_TEAM': {
       const teamIdToDelete = action.payload.teamId;
       const updatedGroups = state.groups.map(group => ({
@@ -153,16 +182,17 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
           };
         }
       }
-      return {
+      newState = {
         ...state,
         teams: state.teams.filter(team => team.id !== teamIdToDelete),
         groups: updatedGroups,
         league: updatedLeague,
       };
+      break;
     }
     case 'EDIT_TEAM_NAME': {
       const { teamId, newName } = action.payload;
-      return {
+      newState = {
         ...state,
         teams: state.teams.map(team =>
           team.id === teamId ? { ...team, name: newName } : team
@@ -189,8 +219,9 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
             team2Name: match.team2Id === teamId ? newName : match.team2Name,
         })))
       };
+      break;
     }
-    case 'CREATE_GROUP':
+    case 'CREATE_GROUP': {
       const newGroupManual: Group = {
         id: `group-${Date.now()}`,
         name: action.payload.name,
@@ -198,14 +229,18 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         matches: [],
         zoneSettings: [],
       };
-      return { ...state, groups: [...state.groups, newGroupManual] };
-    case 'DELETE_GROUP':
-      return {
+      newState = { ...state, groups: [...state.groups, newGroupManual] };
+      break;
+    }
+    case 'DELETE_GROUP': {
+      newState = {
         ...state,
         groups: state.groups.filter(group => group.id !== action.payload.groupId)
       };
-    case 'ADD_TEAM_TO_GROUP':
-      return {
+      break;
+    }
+    case 'ADD_TEAM_TO_GROUP': {
+      newState = {
         ...state,
         groups: state.groups.map(group =>
           group.id === action.payload.groupId
@@ -213,8 +248,10 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
             : group
         ),
       };
-    case 'REMOVE_TEAM_FROM_GROUP':
-      return {
+      break;
+    }
+    case 'REMOVE_TEAM_FROM_GROUP': {
+      newState = {
         ...state,
         groups: state.groups.map(group =>
           group.id === action.payload.groupId
@@ -222,8 +259,10 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
             : group
         ),
       };
-    case 'GENERATE_GROUP_MATCHES':
-      return {
+      break;
+    }
+    case 'GENERATE_GROUP_MATCHES': {
+      newState = {
         ...state,
         groups: state.groups.map(group => {
           if (group.id === action.payload.groupId) {
@@ -233,9 +272,11 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
           return group;
         }),
       };
+      break;
+    }
     case 'UPDATE_GROUP_MATCH_RESULT': {
       const { groupId, matchId, team1Score, team2Score } = action.payload;
-      return {
+      newState = {
         ...state,
         groups: state.groups.map(group =>
           group.id === groupId
@@ -250,12 +291,13 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
             : group
         ),
       };
+      break;
     }
     case 'CREATE_KNOCKOUT_STAGE': {
       const { numTeams, selectedTeamIds } = action.payload;
       if (numTeams < 2 || (numTeams & (numTeams - 1)) !== 0) {
         toast({ title: "Error", description: "El número de equipos para eliminatorias debe ser una potencia de 2 (ej. 2, 4, 8, 16).", variant: "destructive" });
-        return state;
+        return state; // Devuelve el estado original sin cambios
       }
 
       const rounds: KnockoutMatch[][] = [];
@@ -268,7 +310,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
       let roundIndex = 0;
       let teamsInCurrentRound = numTeams;
 
-      // Loop until we have a final match (or a single "champion" placeholder if numTeams is 1, though we guard against numTeams < 2)
       while (teamsInCurrentRound >= 1) {
         const roundMatches: KnockoutMatch[] = [];
         const numberOfMatchesInThisRound = teamsInCurrentRound / 2;
@@ -330,7 +371,8 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         roundIndex++;
          if (roundIndex > 10) break;
       }
-      return { ...state, knockoutRounds: rounds };
+      newState = { ...state, knockoutRounds: rounds };
+      break;
     }
     case 'UPDATE_KNOCKOUT_MATCH_RESULT': {
       const { roundIndex, matchIndexInRound, team1Score, team2Score } = action.payload;
@@ -375,7 +417,8 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
           }
         }
       }
-      return { ...state, knockoutRounds: newKnockoutRounds };
+      newState = { ...state, knockoutRounds: newKnockoutRounds };
+      break;
     }
      case 'RANDOMLY_CREATE_GROUPS_AND_ASSIGN_TEAMS': {
       const { numGroups, groupNamePrefix = "Grupo" } = action.payload;
@@ -425,10 +468,11 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         });
       }
 
-      return {
+      newState = {
         ...state,
         groups: [...state.groups, ...newGroups],
       };
+      break;
     }
     case 'SETUP_LEAGUE': {
       const { name, teamIds, playEachTeamTwice } = action.payload;
@@ -445,10 +489,13 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         playEachTeamTwice,
         zoneSettings: [],
       };
-      return { ...state, league: newLeague };
+      newState = { ...state, league: newLeague };
+      break;
     }
-    case 'CLEAR_LEAGUE':
-      return { ...state, league: null };
+    case 'CLEAR_LEAGUE': {
+      newState = { ...state, league: null };
+      break;
+    }
     case 'GENERATE_LEAGUE_MATCHES': {
       if (!state.league) {
         toast({ title: "Error", description: "No hay ninguna liga configurada para generar partidos.", variant: "destructive" });
@@ -459,15 +506,16 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         return state;
       }
       const leagueMatches = generateRoundRobinMatches(state.league.teamIds, state.teams, !!state.league.playEachTeamTwice);
-      return {
+      newState = {
         ...state,
         league: { ...state.league, matches: leagueMatches },
       };
+      break;
     }
     case 'UPDATE_LEAGUE_MATCH_RESULT': {
       const { matchId, team1Score, team2Score } = action.payload;
       if (!state.league) return state;
-      return {
+      newState = {
         ...state,
         league: {
           ...state.league,
@@ -478,6 +526,7 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
           ),
         },
       };
+      break;
     }
     case 'ADD_LEAGUE_ZONE': {
       if (!state.league) return state;
@@ -489,17 +538,18 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         endPosition,
         color,
       };
-      return {
+      newState = {
         ...state,
         league: {
           ...state.league,
           zoneSettings: [...state.league.zoneSettings, newZone],
         },
       };
+      break;
     }
     case 'EDIT_LEAGUE_ZONE': {
       if (!state.league) return state;
-      return {
+      newState = {
         ...state,
         league: {
           ...state.league,
@@ -508,16 +558,18 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
           ),
         },
       };
+      break;
     }
     case 'DELETE_LEAGUE_ZONE': {
       if (!state.league) return state;
-      return {
+      newState = {
         ...state,
         league: {
           ...state.league,
           zoneSettings: state.league.zoneSettings.filter(zone => zone.id !== action.payload.zoneId),
         },
       };
+      break;
     }
     case 'ADD_GROUP_ZONE': {
       const { groupId, name, startPosition, endPosition, color } = action.payload;
@@ -528,7 +580,7 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         endPosition,
         color,
       };
-      return {
+      newState = {
         ...state,
         groups: state.groups.map(group =>
           group.id === groupId
@@ -536,10 +588,11 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
             : group
         ),
       };
+      break;
     }
     case 'EDIT_GROUP_ZONE': {
       const { groupId, zone: updatedZone } = action.payload;
-      return {
+      newState = {
         ...state,
         groups: state.groups.map(group =>
           group.id === groupId
@@ -552,10 +605,11 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
             : group
         ),
       };
+      break;
     }
     case 'DELETE_GROUP_ZONE': {
       const { groupId, zoneId } = action.payload;
-      return {
+      newState = {
         ...state,
         groups: state.groups.map(group =>
           group.id === groupId
@@ -566,15 +620,31 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
             : group
         ),
       };
+      break;
     }
-    case 'RESET_TOURNAMENT':
+    case 'RESET_TOURNAMENT': {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('tournamentState');
       }
-      return { ...initialState, isInitialized: true };
+      newState = { ...initialState, isInitialized: true };
+      // Firestore: Borrar el documento del torneo
+      const tournamentDocRef = doc(db, TOURNAMENT_DOC_PATH);
+      deleteDoc(tournamentDocRef).then(() => {
+        console.log("Tournament data deleted from Firestore");
+      }).catch(error => {
+        console.error("Error deleting tournament data from Firestore:", error);
+      });
+      break;
+    }
     default:
       return state;
   }
+  // Después de cada acción que modifica el estado, guardamos en Firestore.
+  // Excluimos 'INITIALIZE_STATE' porque esa acción carga el estado.
+  if (action.type !== 'INITIALIZE_STATE') {
+    saveTournamentStateToFirestore(newState);
+  }
+  return newState;
 };
 
 
@@ -585,6 +655,9 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [state, dispatch] = useReducer(tournamentReducer, initialState);
 
   useEffect(() => {
+    // TODO: Próximo paso será leer desde Firestore aquí, y fusionar con localStorage si es necesario,
+    // o decidir una estrategia (Firestore como única fuente de verdad).
+    // Por ahora, seguimos cargando desde localStorage para no romper la app.
     if (typeof window !== 'undefined') {
       const savedStateString = localStorage.getItem('tournamentState');
       let statePayload: Omit<TournamentState, 'isInitialized'> = {
@@ -605,7 +678,7 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               name: g.name || 'Grupo',
               matches: g.matches || [],
               teamIds: g.teamIds || [],
-              zoneSettings: (g.zoneSettings || []).map(zs => ({ // Ensure group zones are loaded
+              zoneSettings: (g.zoneSettings || []).map(zs => ({ 
                 id: zs.id || `zone-${Date.now()}-${Math.random().toString(36).substring(2,7)}`,
                 name: zs.name || 'Zona sin nombre',
                 startPosition: typeof zs.startPosition === 'number' ? zs.startPosition : 1,
@@ -625,8 +698,8 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               zoneSettings: (loadedSavedState.league.zoneSettings || []).map(zs => ({
                 id: zs.id || `zone-${Date.now()}-${Math.random().toString(36).substring(2,7)}`,
                 name: zs.name || 'Zona sin nombre',
-                startPosition: typeof zs.startPosition === 'number' ? zs.startPosition : (typeof (zs as any).positions === 'number' ? 1 : 0), // Basic migration attempt
-                endPosition: typeof zs.endPosition === 'number' ? zs.endPosition : (typeof (zs as any).positions === 'number' ? (zs as any).positions : 0), // Basic migration attempt
+                startPosition: typeof zs.startPosition === 'number' ? zs.startPosition : (typeof (zs as any).positions === 'number' ? 1 : 0), 
+                endPosition: typeof zs.endPosition === 'number' ? zs.endPosition : (typeof (zs as any).positions === 'number' ? (zs as any).positions : 0), 
                 color: zs.color || '#000000',
                 ...zs
               })),
@@ -650,6 +723,8 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   useEffect(() => {
     if (typeof window !== 'undefined' && state.isInitialized) {
       localStorage.setItem('tournamentState', JSON.stringify(state));
+      // Ya no llamamos a saveTournamentStateToFirestore aquí directamente.
+      // Se llama dentro del reducer después de cada acción modificadora.
     }
   }, [state]);
 
@@ -700,4 +775,3 @@ export const useIsClient = () => {
   useEffect(() => setIsClient(true), []);
   return isClient;
 }
-
