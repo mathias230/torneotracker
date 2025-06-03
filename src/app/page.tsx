@@ -22,37 +22,38 @@ export default function HomePage() {
   return (
     <div className="w-full">
       <Tabs defaultValue="teams" className="w-full">
-        <TabsList className="grid w-full grid-cols-1 sm:grid-cols-4 mb-6 shadow-sm">
-          <TabsTrigger value="teams" className="py-3 text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
-            <Users className="mr-1.5 h-3.5 w-3.5 sm:h-5 sm:w-5" />
+        <TabsList className="grid w-full grid-cols-1 xs:grid-cols-2 md:grid-cols-4 mb-4 sm:mb-6 shadow-sm gap-1.5 sm:gap-2">
+          <TabsTrigger value="teams" className="py-2.5 sm:py-3 text-[10px] xs:text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+            <Users className="mr-1 h-3.5 w-3.5 xs:mr-1.5 xs:h-4 xs:w-4 sm:h-5 sm:w-5" />
             Gestión de Equipos
           </TabsTrigger>
-          <TabsTrigger value="league" className="py-3 text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
-            <ClipboardList className="mr-1.5 h-3.5 w-3.5 sm:h-5 sm:w-5" />
+          <TabsTrigger value="league" className="py-2.5 sm:py-3 text-[10px] xs:text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+            <ClipboardList className="mr-1 h-3.5 w-3.5 xs:mr-1.5 xs:h-4 xs:w-4 sm:h-5 sm:w-5" />
             Liga
           </TabsTrigger>
-          <TabsTrigger value="group_stage" className="py-3 text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
-            <ListChecks className="mr-1.5 h-3.5 w-3.5 sm:h-5 sm:w-5" />
+          <TabsTrigger value="group_stage" className="py-2.5 sm:py-3 text-[10px] xs:text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+            <ListChecks className="mr-1 h-3.5 w-3.5 xs:mr-1.5 xs:h-4 xs:w-4 sm:h-5 sm:w-5" />
             Fase de Grupos
           </TabsTrigger>
-          <TabsTrigger value="knockout_stage" className="py-3 text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
-            <GitFork className="mr-1.5 h-3.5 w-3.5 sm:h-5 sm:w-5" />
+          <TabsTrigger value="knockout_stage" className="py-2.5 sm:py-3 text-[10px] xs:text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+            <GitFork className="mr-1 h-3.5 w-3.5 xs:mr-1.5 xs:h-4 xs:w-4 sm:h-5 sm:w-5" />
             Fase Eliminatoria
           </TabsTrigger>
         </TabsList>
-        <TabsContent value="teams" className="mt-2">
+        <TabsContent value="teams" className="mt-2 sm:mt-4">
           <TeamManagement />
         </TabsContent>
-        <TabsContent value="league" className="mt-2">
+        <TabsContent value="league" className="mt-2 sm:mt-4">
           <LeagueManagement />
         </TabsContent>
-        <TabsContent value="group_stage" className="mt-2">
+        <TabsContent value="group_stage" className="mt-2 sm:mt-4">
           <GroupStageManagement />
         </TabsContent>
-        <TabsContent value="knockout_stage" className="mt-2">
+        <TabsContent value="knockout_stage" className="mt-2 sm:mt-4">
           <KnockoutStageManagement />
         </TabsContent>
       </Tabs>
     </div>
   );
 }
+
