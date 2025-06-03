@@ -1,3 +1,4 @@
+
 "use client";
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -32,7 +33,6 @@ export default function AppHeader() {
 
   const renderThemeToggleButton = () => {
     if (!mounted) {
-      // Placeholder to prevent hydration mismatch and maintain layout
       return <div className="w-10 h-10" />; 
     }
     return (
@@ -40,7 +40,7 @@ export default function AppHeader() {
         variant="outline"
         size="icon"
         onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-        aria-label="Toggle theme"
+        aria-label="Alternar tema"
       >
         {resolvedTheme === 'dark' ? (
           <Sun className="h-[1.2rem] w-[1.2rem]" />
@@ -56,25 +56,25 @@ export default function AppHeader() {
       <div className="container mx-auto px-4 py-3 flex justify-between items-center">
         <Link href="/" className="flex items-center gap-2 text-xl font-headline font-semibold text-primary hover:text-primary/80 transition-colors">
           <Zap className="h-6 w-6" />
-          Tournament Tracker
+          Gestor de Torneos
         </Link>
         <div className="flex items-center gap-2">
           {renderThemeToggleButton()}
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="sm">Reset Tournament Data</Button>
+              <Button variant="destructive" size="sm">Reiniciar Datos del Torneo</Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                <AlertDialogTitle>¿Estás absolutamente seguro?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This action cannot be undone. This will permanently delete all
-                  tournament data including teams, groups, and match results.
+                  Esta acción no se puede deshacer. Esto eliminará permanentemente todos
+                  los datos del torneo, incluyendo equipos, grupos y resultados de partidos.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleReset}>Yes, reset data</AlertDialogAction>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={handleReset}>Sí, reiniciar datos</AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>

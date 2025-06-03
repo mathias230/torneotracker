@@ -1,3 +1,4 @@
+
 export interface Team {
   id: string;
   name: string;
@@ -14,7 +15,7 @@ export interface Match {
   played: boolean;
 }
 
-export interface GroupTeamStats {
+export interface GroupTeamStats { // Also used for League standings
   teamId: string;
   teamName: string;
   played: number;
@@ -27,28 +28,46 @@ export interface GroupTeamStats {
   points: number;
 }
 
+export interface LeagueZoneSetting { // Reused for Group zones
+  id: string;
+  name: string;
+  startPosition: number;
+  endPosition: number;
+  color: string; // CSS color string
+}
+
 export interface Group {
   id: string;
   name: string;
   teamIds: string[];
   matches: Match[];
-  // standings will be calculated on the fly or stored if performance becomes an issue
+  zoneSettings?: LeagueZoneSetting[];
+}
+
+export interface League {
+  id: string;
+  name: string;
+  teamIds: string[];
+  matches: Match[];
+  playEachTeamTwice?: boolean;
+  zoneSettings: LeagueZoneSetting[];
 }
 
 export interface KnockoutMatch extends Match {
   roundIndex: number;
-  matchIndexInRound: number; 
-  nextMatchId?: string; // Used internally to link matches
+  matchIndexInRound: number;
+  nextMatchId?: string;
   nextRoundIndex?: number;
   nextMatchIndexInRound?: number;
-  placeholder?: string; // e.g., "Winner of Match A"
+  placeholder?: string;
 }
 
 export interface TournamentState {
   teams: Team[];
   groups: Group[];
+  league: League | null;
   knockoutRounds: KnockoutMatch[][];
-  isInitialized: boolean; // To track if state has been loaded from localStorage
+  isInitialized: boolean;
 }
 
 export type TournamentAction =
@@ -65,4 +84,15 @@ export type TournamentAction =
   | { type: 'CREATE_KNOCKOUT_STAGE'; payload: { numTeams: number, selectedTeamIds: string[] } }
   | { type: 'UPDATE_KNOCKOUT_MATCH_RESULT'; payload: { roundIndex: number; matchIndexInRound: number; team1Score: number; team2Score: number } }
   | { type: 'RESET_TOURNAMENT' }
-  | { type: 'RANDOMLY_CREATE_GROUPS_AND_ASSIGN_TEAMS'; payload: { numGroups: number; groupNamePrefix?: string } };
+  | { type: 'RANDOMLY_CREATE_GROUPS_AND_ASSIGN_TEAMS'; payload: { numGroups: number; groupNamePrefix?: string } }
+  | { type: 'SETUP_LEAGUE'; payload: { name: string; teamIds: string[]; playEachTeamTwice: boolean; } }
+  | { type: 'CLEAR_LEAGUE' }
+  | { type: 'GENERATE_LEAGUE_MATCHES' }
+  | { type: 'UPDATE_LEAGUE_MATCH_RESULT'; payload: { matchId: string; team1Score: number; team2Score: number } }
+  | { type: 'ADD_LEAGUE_ZONE'; payload: { name: string; startPosition: number; endPosition: number; color: string } }
+  | { type: 'EDIT_LEAGUE_ZONE'; payload: LeagueZoneSetting }
+  | { type: 'DELETE_LEAGUE_ZONE'; payload: { zoneId: string } }
+  | { type: 'ADD_GROUP_ZONE'; payload: { groupId: string; name: string; startPosition: number; endPosition: number; color: string } }
+  | { type: 'EDIT_GROUP_ZONE'; payload: { groupId: string; zone: LeagueZoneSetting } }
+  | { type: 'DELETE_GROUP_ZONE'; payload: { groupId: string; zoneId: string } };
+

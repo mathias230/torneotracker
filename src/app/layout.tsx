@@ -1,3 +1,4 @@
+
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
@@ -6,8 +7,12 @@ import { TournamentProvider } from '@/components/TournamentContext';
 import { ThemeProvider } from 'next-themes';
 
 export const metadata: Metadata = {
-  title: 'Tournament Tracker',
-  description: 'Manage your own sports tournament brackets and standings.',
+  title: 'Gestor de Torneos',
+  description: 'Administra tus propios cuadros y clasificaciones de torneos deportivos.',
+  icons: {
+    icon: '/favicon.ico', // Next.js buscará este archivo en la carpeta public/
+    apple: '/apple-touch-icon.png', // Para dispositivos Apple
+  },
 };
 
 export default function RootLayout({
@@ -16,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="es" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />

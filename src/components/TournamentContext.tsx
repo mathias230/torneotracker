@@ -2,12 +2,13 @@
 "use client";
 import type { Dispatch } from 'react';
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import type { TournamentState, TournamentAction, Team, Group, Match, GroupTeamStats, KnockoutMatch } from '@/types';
+import type { TournamentState, TournamentAction, Team, Group, Match, GroupTeamStats, KnockoutMatch, League, LeagueZoneSetting } from '@/types';
 import { toast } from "@/hooks/use-toast";
 
 const initialState: TournamentState = {
   teams: [],
   groups: [],
+  league: null,
   knockoutRounds: [],
   isInitialized: false,
 };
@@ -22,14 +23,14 @@ function shuffleArray<T>(array: T[]): T[] {
   return newArray;
 }
 
-function generateMatchesForGroup(teamIds: string[], allTeams: Team[]): Match[] {
+function generateRoundRobinMatches(teamIds: string[], allTeams: Team[], playTwice: boolean): Match[] {
   const matches: Match[] = [];
   if (teamIds.length < 2) return matches;
 
   for (let i = 0; i < teamIds.length; i++) {
     for (let j = i + 1; j < teamIds.length; j++) {
       matches.push({
-        id: `match-${Date.now()}-${Math.random()}`,
+        id: `match-${Date.now()}-${Math.random().toString(36).substring(2, 7)}-1`,
         team1Id: teamIds[i],
         team2Id: teamIds[j],
         team1Name: allTeams.find(t => t.id === teamIds[i])?.name,
@@ -38,19 +39,36 @@ function generateMatchesForGroup(teamIds: string[], allTeams: Team[]): Match[] {
         team2Score: null,
         played: false,
       });
+
+      if (playTwice) {
+        matches.push({
+          id: `match-${Date.now()}-${Math.random().toString(36).substring(2, 7)}-2`,
+          team1Id: teamIds[j],
+          team2Id: teamIds[i],
+          team1Name: allTeams.find(t => t.id === teamIds[j])?.name,
+          team2Name: allTeams.find(t => t.id === teamIds[i])?.name,
+          team1Score: null,
+          team2Score: null,
+          played: false,
+        });
+      }
     }
   }
-  return shuffleArray(matches); // Shuffle the generated matches
+  return shuffleArray(matches);
 }
 
-function calculateGroupStandings(group: Group, allTeams: Team[]): GroupTeamStats[] {
+
+function calculateStandings(
+  entity: { teamIds: string[], matches: Match[], name?: string },
+  allTeams: Team[]
+): GroupTeamStats[] {
   const statsMap = new Map<string, GroupTeamStats>();
 
-  group.teamIds.forEach(teamId => {
+  entity.teamIds.forEach(teamId => {
     const team = allTeams.find(t => t.id === teamId);
     statsMap.set(teamId, {
       teamId,
-      teamName: team?.name || 'Unknown Team',
+      teamName: team?.name || 'Equipo Desconocido',
       played: 0,
       won: 0,
       drawn: 0,
@@ -62,10 +80,13 @@ function calculateGroupStandings(group: Group, allTeams: Team[]): GroupTeamStats
     });
   });
 
-  group.matches.forEach(match => {
+  entity.matches.forEach(match => {
     if (match.played && match.team1Score !== null && match.team2Score !== null) {
-      const team1Stats = statsMap.get(match.team1Id)!;
-      const team2Stats = statsMap.get(match.team2Id)!;
+      const team1Stats = statsMap.get(match.team1Id);
+      const team2Stats = statsMap.get(match.team2Id);
+
+      if (!team1Stats || !team2Stats) return;
+
 
       team1Stats.played++;
       team2Stats.played++;
@@ -110,48 +131,74 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
     case 'ADD_TEAM':
       const newTeam: Team = { id: `team-${Date.now()}`, name: action.payload.name };
       return { ...state, teams: [...state.teams, newTeam] };
-    case 'DELETE_TEAM':
-      // Also remove team from groups and potentially invalidate knockout matches
+    case 'DELETE_TEAM': {
       const teamIdToDelete = action.payload.teamId;
+      const updatedGroups = state.groups.map(group => ({
+        ...group,
+        teamIds: group.teamIds.filter(id => id !== teamIdToDelete),
+        matches: group.matches.filter(match => match.team1Id !== teamIdToDelete && match.team2Id !== teamIdToDelete)
+      })).filter(group => group.teamIds.length > 0);
+
+      let updatedLeague = state.league;
+      if (state.league && state.league.teamIds.includes(teamIdToDelete)) {
+        const newLeagueTeamIds = state.league.teamIds.filter(id => id !== teamIdToDelete);
+        if (newLeagueTeamIds.length < 2) {
+          updatedLeague = null;
+          toast({ title: "Liga Borrada", description: `El equipo ${state.teams.find(t=>t.id === teamIdToDelete)?.name || teamIdToDelete} fue eliminado, haciendo la liga inviable. La liga ha sido borrada.`, variant: "default" });
+        } else {
+          updatedLeague = {
+            ...state.league,
+            teamIds: newLeagueTeamIds,
+            matches: state.league.matches.filter(match => match.team1Id !== teamIdToDelete && match.team2Id !== teamIdToDelete)
+          };
+        }
+      }
       return {
         ...state,
         teams: state.teams.filter(team => team.id !== teamIdToDelete),
-        groups: state.groups.map(group => ({
-          ...group,
-          teamIds: group.teamIds.filter(id => id !== teamIdToDelete),
-          matches: group.matches.filter(match => match.team1Id !== teamIdToDelete && match.team2Id !== teamIdToDelete)
-        })),
-        // Knockout stage implications are complex, for now, just filter teams
+        groups: updatedGroups,
+        league: updatedLeague,
       };
-    case 'EDIT_TEAM_NAME':
+    }
+    case 'EDIT_TEAM_NAME': {
+      const { teamId, newName } = action.payload;
       return {
         ...state,
         teams: state.teams.map(team =>
-          team.id === action.payload.teamId ? { ...team, name: action.payload.newName } : team
+          team.id === teamId ? { ...team, name: newName } : team
         ),
-        // Update names in matches if cached there
         groups: state.groups.map(group => ({
           ...group,
           matches: group.matches.map(match => ({
             ...match,
-            team1Name: match.team1Id === action.payload.teamId ? action.payload.newName : match.team1Name,
-            team2Name: match.team2Id === action.payload.teamId ? action.payload.newName : match.team2Name,
+            team1Name: match.team1Id === teamId ? newName : match.team1Name,
+            team2Name: match.team2Id === teamId ? newName : match.team2Name,
           }))
         })),
+        league: state.league ? {
+          ...state.league,
+          matches: state.league.matches.map(match => ({
+            ...match,
+            team1Name: match.team1Id === teamId ? newName : match.team1Name,
+            team2Name: match.team2Id === teamId ? newName : match.team2Name,
+          }))
+        } : null,
         knockoutRounds: state.knockoutRounds.map(round => round.map(match => ({
           ...match,
-            team1Name: match.team1Id === action.payload.teamId ? action.payload.newName : match.team1Name,
-            team2Name: match.team2Id === action.payload.teamId ? action.payload.newName : match.team2Name,
+            team1Name: match.team1Id === teamId ? newName : match.team1Name,
+            team2Name: match.team2Id === teamId ? newName : match.team2Name,
         })))
       };
+    }
     case 'CREATE_GROUP':
-      const newGroup: Group = {
+      const newGroupManual: Group = {
         id: `group-${Date.now()}`,
         name: action.payload.name,
         teamIds: [],
         matches: [],
+        zoneSettings: [],
       };
-      return { ...state, groups: [...state.groups, newGroup] };
+      return { ...state, groups: [...state.groups, newGroupManual] };
     case 'DELETE_GROUP':
       return {
         ...state,
@@ -180,7 +227,7 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         ...state,
         groups: state.groups.map(group => {
           if (group.id === action.payload.groupId) {
-            const newMatches = generateMatchesForGroup(group.teamIds, state.teams);
+            const newMatches = generateRoundRobinMatches(group.teamIds, state.teams, false);
             return { ...group, matches: newMatches };
           }
           return group;
@@ -206,15 +253,14 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
     }
     case 'CREATE_KNOCKOUT_STAGE': {
       const { numTeams, selectedTeamIds } = action.payload;
-      if (numTeams < 2 || (numTeams & (numTeams - 1)) !== 0) { // Must be a power of 2
-        toast({ title: "Error", description: "Number of teams for knockout must be a power of 2 (e.g., 2, 4, 8, 16).", variant: "destructive" });
+      if (numTeams < 2 || (numTeams & (numTeams - 1)) !== 0) {
+        toast({ title: "Error", description: "El número de equipos para eliminatorias debe ser una potencia de 2 (ej. 2, 4, 8, 16).", variant: "destructive" });
         return state;
       }
-      
+
       const rounds: KnockoutMatch[][] = [];
       let currentRoundTeams = selectedTeamIds.slice(0, numTeams);
-      
-      // Pad with placeholder teams if not enough selected
+
       while(currentRoundTeams.length < numTeams) {
         currentRoundTeams.push(`placeholder-${currentRoundTeams.length}`);
       }
@@ -222,9 +268,35 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
       let roundIndex = 0;
       let teamsInCurrentRound = numTeams;
 
+      // Loop until we have a final match (or a single "champion" placeholder if numTeams is 1, though we guard against numTeams < 2)
       while (teamsInCurrentRound >= 1) {
         const roundMatches: KnockoutMatch[] = [];
-        for (let i = 0; i < teamsInCurrentRound / 2; i++) {
+        const numberOfMatchesInThisRound = teamsInCurrentRound / 2;
+
+        if (teamsInCurrentRound === 1 && numberOfMatchesInThisRound === 0.5) {
+            const finalWinnerId = currentRoundTeams[0];
+            const finalWinnerTeam = state.teams.find(t => t.id === finalWinnerId);
+            const finalWinnerName = finalWinnerTeam?.name || (typeof finalWinnerId === 'string' && finalWinnerId.startsWith('winner-') ? `Campeón` : 'Campeón');
+
+            roundMatches.push({
+                id: `ko-r${roundIndex}-m-champion-${Date.now()}`,
+                team1Id: finalWinnerId,
+                team2Id: null,
+                team1Name: finalWinnerName,
+                team2Name: null,
+                team1Score: null,
+                team2Score: null,
+                played: true,
+                roundIndex,
+                matchIndexInRound: 0,
+                placeholder: !finalWinnerId || finalWinnerId.startsWith('winner-') ? "Campeón del Torneo" : undefined,
+            });
+            rounds.push(roundMatches);
+            break;
+        }
+
+
+        for (let i = 0; i < numberOfMatchesInThisRound; i++) {
           const team1Id = currentRoundTeams[i*2];
           const team2Id = currentRoundTeams[i*2+1];
           const team1 = state.teams.find(t => t.id === team1Id);
@@ -234,94 +306,91 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
             id: `ko-r${roundIndex}-m${i}-${Date.now()}`,
             team1Id: team1Id,
             team2Id: team2Id,
-            team1Name: team1?.name || (typeof team1Id === 'string' && team1Id.startsWith('placeholder-') ? `Team ${i*2+1}`: 'TBD'),
-            team2Name: team2?.name || (typeof team2Id === 'string' && team2Id.startsWith('placeholder-') ? `Team ${i*2+2}`: 'TBD'),
+            team1Name: team1?.name || (typeof team1Id === 'string' && team1Id.startsWith('placeholder-') ? `Equipo ${i*2+1}`: `A determinar`),
+            team2Name: team2?.name || (typeof team2Id === 'string' && team2Id.startsWith('placeholder-') ? `Equipo ${i*2+2}`: `A determinar`),
             team1Score: null,
             team2Score: null,
             played: false,
             roundIndex,
             matchIndexInRound: i,
-            placeholder: (!team1Id || team1Id.startsWith('winner-') || team1Id.startsWith('placeholder-') || !team2Id || team2Id.startsWith('winner-') || team2Id.startsWith('placeholder-')) ? "Waiting for teams" : undefined,
+            placeholder: (!team1Id || team1Id.startsWith('winner-') || team1Id.startsWith('placeholder-') || !team2Id || team2Id.startsWith('winner-') || team2Id.startsWith('placeholder-')) ? "Esperando equipos" : undefined,
           });
         }
-        rounds.push(roundMatches);
-        if (teamsInCurrentRound === 1) break; // Final (winner display)
-        
+        if(roundMatches.length > 0) rounds.push(roundMatches);
+
+
+        if (teamsInCurrentRound <= 1) break;
+
         const nextRoundPlaceholders: string[] = [];
-        for(let i = 0; i < teamsInCurrentRound / 2; i++) {
+        for(let i = 0; i < numberOfMatchesInThisRound; i++) {
           nextRoundPlaceholders.push(`winner-r${roundIndex}-m${i}`);
         }
         currentRoundTeams = nextRoundPlaceholders;
         teamsInCurrentRound /= 2;
         roundIndex++;
+         if (roundIndex > 10) break;
       }
       return { ...state, knockoutRounds: rounds };
     }
     case 'UPDATE_KNOCKOUT_MATCH_RESULT': {
       const { roundIndex, matchIndexInRound, team1Score, team2Score } = action.payload;
-      const newKnockoutRounds = state.knockoutRounds.map(r => r.map(m => ({...m}))); // Deep copy
+      const newKnockoutRounds = state.knockoutRounds.map(r => r.map(m => ({...m})));
 
       const match = newKnockoutRounds[roundIndex]?.[matchIndexInRound];
-      if (!match || !match.team1Id || !match.team2Id) return state; // Ensure match and team IDs exist
+      if (!match || !match.team1Id || !match.team2Id) return state;
 
       match.team1Score = team1Score;
       match.team2Score = team2Score;
       match.played = true;
 
-      // Advance winner to next round
       if (roundIndex < newKnockoutRounds.length - 1) {
         const winnerId = team1Score > team2Score ? match.team1Id : match.team2Id;
-        
-        let winnerName = 'TBD';
+
+        let winnerName = 'A determinar';
         const foundWinnerTeam = state.teams.find(t => t.id === winnerId);
         if (foundWinnerTeam) {
             winnerName = foundWinnerTeam.name;
         } else if (typeof winnerId === 'string' && (winnerId.startsWith('winner-') || winnerId.startsWith('placeholder-'))) {
-            // If the winnerId itself is a placeholder, the name remains 'TBD' or could be more specific
-            // For now, using a generic approach or what was in match if available.
-            // This part might need refinement if specific placeholder names are desired for winners of placeholders.
-            winnerName = (team1Score > team2Score ? match.team1Name : match.team2Name) || 'TBD';
+             winnerName = (team1Score > team2Score ? match.team1Name : match.team2Name) || 'A determinar';
         } else {
-            winnerName = `Winner of ${match.team1Name || 'match'} vs ${match.team2Name || 'match'}`;
+            winnerName = `Ganador de ${match.team1Name || 'partido'} vs ${match.team2Name || 'partido'}`;
         }
-
 
         const nextRoundMatchIndex = Math.floor(matchIndexInRound / 2);
         const nextMatch = newKnockoutRounds[roundIndex + 1]?.[nextRoundMatchIndex];
 
         if (nextMatch) {
-          if (matchIndexInRound % 2 === 0) { // This match is the first in a pair for the next round match
+          if (matchIndexInRound % 2 === 0) {
             nextMatch.team1Id = winnerId;
             nextMatch.team1Name = winnerName;
-          } else { // This match is the second in a pair
+          } else {
             nextMatch.team2Id = winnerId;
             nextMatch.team2Name = winnerName;
           }
-          // Update placeholder state for the next match
            if (nextMatch.team1Id && !nextMatch.team1Id.startsWith('winner-') && !nextMatch.team1Id.startsWith('placeholder-') &&
                nextMatch.team2Id && !nextMatch.team2Id.startsWith('winner-') && !nextMatch.team2Id.startsWith('placeholder-')) {
             nextMatch.placeholder = undefined;
           } else {
-            nextMatch.placeholder = "Waiting for teams";
+            nextMatch.placeholder = "Esperando equipos";
           }
         }
       }
       return { ...state, knockoutRounds: newKnockoutRounds };
     }
      case 'RANDOMLY_CREATE_GROUPS_AND_ASSIGN_TEAMS': {
-      const { numGroups, groupNamePrefix = "Group" } = action.payload;
+      const { numGroups, groupNamePrefix = "Grupo" } = action.payload;
       const { teams } = state;
 
       if (numGroups <= 0) {
-        toast({ title: "Error", description: "Number of groups must be greater than 0.", variant: "destructive" });
+        toast({ title: "Error", description: "El número de grupos debe ser mayor que 0.", variant: "destructive" });
         return state;
       }
       if (teams.length === 0 ) {
-        toast({ title: "Error", description: "No teams available to assign to groups. Please add teams first.", variant: "destructive" });
+        toast({ title: "Error", description: "No hay equipos disponibles para asignar a grupos. Por favor, añade equipos primero.", variant: "destructive" });
         return state;
       }
       if (teams.length < numGroups) {
-         toast({ title: "Error", description: `Not enough teams (have ${teams.length}) to create ${numGroups} groups with at least one team each.`, variant: "destructive" });
+         toast({ title: "Error", description: `No hay suficientes equipos (tienes ${teams.length}) para crear ${numGroups} grupos con al menos un equipo cada uno.`, variant: "destructive" });
         return state;
       }
 
@@ -336,41 +405,173 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         if (remainderTeams > 0) {
           remainderTeams--;
         }
-        
+
         const groupTeamIds = shuffledTeams.slice(currentTeamIndex, currentTeamIndex + teamsInThisGroupCount).map(t => t.id);
         currentTeamIndex += teamsInThisGroupCount;
 
-        if (groupTeamIds.length === 0 && teams.length > 0) { 
+        if (groupTeamIds.length === 0 && teams.length > 0) {
             continue;
         }
 
-        const groupName = `${groupNamePrefix} ${String.fromCharCode(65 + i)}`; // Group A, Group B, etc.
-        const groupMatches = generateMatchesForGroup(groupTeamIds, state.teams);
-        
+        const groupName = `${groupNamePrefix} ${String.fromCharCode(65 + i)}`;
+        const groupMatches = generateRoundRobinMatches(groupTeamIds, state.teams, false);
+
         newGroups.push({
           id: `group-${Date.now()}-${Math.random()}`,
           name: groupName,
           teamIds: groupTeamIds,
           matches: groupMatches,
+          zoneSettings: [],
         });
       }
-      
+
       return {
         ...state,
-        // Replace existing groups if we want to reset them, or add to them.
-        // For now, let's add to existing ones, but typically random creation might imply clearing old ones.
-        // Decision: Clear existing groups if this action is called, or add a separate "clear groups" action.
-        // For now, it appends. This could be confusing.
-        // Let's make it replace the groups of type "Random Group X" if they exist, or just add if no name collision.
-        // Simpler: just add. User can delete old ones.
-        groups: [...state.groups, ...newGroups], 
+        groups: [...state.groups, ...newGroups],
+      };
+    }
+    case 'SETUP_LEAGUE': {
+      const { name, teamIds, playEachTeamTwice } = action.payload;
+      if (teamIds.length < 2) {
+        toast({ title: "Error", description: "Una liga requiere al menos 2 equipos.", variant: "destructive" });
+        return state;
+      }
+      const leagueMatches = generateRoundRobinMatches(teamIds, state.teams, playEachTeamTwice);
+      const newLeague: League = {
+        id: `league-${Date.now()}`,
+        name,
+        teamIds,
+        matches: leagueMatches,
+        playEachTeamTwice,
+        zoneSettings: [],
+      };
+      return { ...state, league: newLeague };
+    }
+    case 'CLEAR_LEAGUE':
+      return { ...state, league: null };
+    case 'GENERATE_LEAGUE_MATCHES': {
+      if (!state.league) {
+        toast({ title: "Error", description: "No hay ninguna liga configurada para generar partidos.", variant: "destructive" });
+        return state;
+      }
+      if (state.league.teamIds.length < 2) {
+         toast({ title: "Error", description: "La liga necesita al menos 2 equipos para generar partidos.", variant: "destructive" });
+        return state;
+      }
+      const leagueMatches = generateRoundRobinMatches(state.league.teamIds, state.teams, !!state.league.playEachTeamTwice);
+      return {
+        ...state,
+        league: { ...state.league, matches: leagueMatches },
+      };
+    }
+    case 'UPDATE_LEAGUE_MATCH_RESULT': {
+      const { matchId, team1Score, team2Score } = action.payload;
+      if (!state.league) return state;
+      return {
+        ...state,
+        league: {
+          ...state.league,
+          matches: state.league.matches.map(match =>
+            match.id === matchId
+              ? { ...match, team1Score, team2Score, played: true }
+              : match
+          ),
+        },
+      };
+    }
+    case 'ADD_LEAGUE_ZONE': {
+      if (!state.league) return state;
+      const { name, startPosition, endPosition, color } = action.payload;
+      const newZone: LeagueZoneSetting = {
+        id: `zone-${Date.now()}`,
+        name,
+        startPosition,
+        endPosition,
+        color,
+      };
+      return {
+        ...state,
+        league: {
+          ...state.league,
+          zoneSettings: [...state.league.zoneSettings, newZone],
+        },
+      };
+    }
+    case 'EDIT_LEAGUE_ZONE': {
+      if (!state.league) return state;
+      return {
+        ...state,
+        league: {
+          ...state.league,
+          zoneSettings: state.league.zoneSettings.map(zone =>
+            zone.id === action.payload.id ? { ...zone, ...action.payload } : zone
+          ),
+        },
+      };
+    }
+    case 'DELETE_LEAGUE_ZONE': {
+      if (!state.league) return state;
+      return {
+        ...state,
+        league: {
+          ...state.league,
+          zoneSettings: state.league.zoneSettings.filter(zone => zone.id !== action.payload.zoneId),
+        },
+      };
+    }
+    case 'ADD_GROUP_ZONE': {
+      const { groupId, name, startPosition, endPosition, color } = action.payload;
+      const newZone: LeagueZoneSetting = {
+        id: `zone-${Date.now()}`,
+        name,
+        startPosition,
+        endPosition,
+        color,
+      };
+      return {
+        ...state,
+        groups: state.groups.map(group =>
+          group.id === groupId
+            ? { ...group, zoneSettings: [...(group.zoneSettings || []), newZone] }
+            : group
+        ),
+      };
+    }
+    case 'EDIT_GROUP_ZONE': {
+      const { groupId, zone: updatedZone } = action.payload;
+      return {
+        ...state,
+        groups: state.groups.map(group =>
+          group.id === groupId
+            ? {
+                ...group,
+                zoneSettings: (group.zoneSettings || []).map(zone =>
+                  zone.id === updatedZone.id ? updatedZone : zone
+                ),
+              }
+            : group
+        ),
+      };
+    }
+    case 'DELETE_GROUP_ZONE': {
+      const { groupId, zoneId } = action.payload;
+      return {
+        ...state,
+        groups: state.groups.map(group =>
+          group.id === groupId
+            ? {
+                ...group,
+                zoneSettings: (group.zoneSettings || []).filter(zone => zone.id !== zoneId),
+              }
+            : group
+        ),
       };
     }
     case 'RESET_TOURNAMENT':
       if (typeof window !== 'undefined') {
         localStorage.removeItem('tournamentState');
       }
-      return { ...initialState, isInitialized: true }; // Reset to initial but mark as initialized
+      return { ...initialState, isInitialized: true };
     default:
       return state;
   }
@@ -385,29 +586,75 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedState = localStorage.getItem('tournamentState');
-      if (savedState) {
+      const savedStateString = localStorage.getItem('tournamentState');
+      let statePayload: Omit<TournamentState, 'isInitialized'> = {
+        teams: [],
+        groups: [],
+        league: null,
+        knockoutRounds: [],
+      };
+
+      if (savedStateString) {
         try {
-          const parsedState = JSON.parse(savedState);
-          dispatch({ type: 'INITIALIZE_STATE', payload: parsedState });
+          const loadedSavedState = JSON.parse(savedStateString) as Partial<TournamentState>;
+
+          statePayload = {
+            teams: loadedSavedState.teams || [],
+            groups: (loadedSavedState.groups || []).map(g => ({
+              id: g.id || `group-${Date.now()}-${Math.random().toString(36).substring(2,7)}`,
+              name: g.name || 'Grupo',
+              matches: g.matches || [],
+              teamIds: g.teamIds || [],
+              zoneSettings: (g.zoneSettings || []).map(zs => ({ // Ensure group zones are loaded
+                id: zs.id || `zone-${Date.now()}-${Math.random().toString(36).substring(2,7)}`,
+                name: zs.name || 'Zona sin nombre',
+                startPosition: typeof zs.startPosition === 'number' ? zs.startPosition : 1,
+                endPosition: typeof zs.endPosition === 'number' ? zs.endPosition : 1,
+                color: zs.color || '#000000',
+                ...zs
+              })),
+              ...g
+            })),
+            knockoutRounds: loadedSavedState.knockoutRounds || [],
+            league: loadedSavedState.league ? {
+              id: loadedSavedState.league.id || `league-${Date.now()}`,
+              name: loadedSavedState.league.name || 'Mi Liga',
+              teamIds: loadedSavedState.league.teamIds || [],
+              matches: loadedSavedState.league.matches || [],
+              playEachTeamTwice: typeof loadedSavedState.league.playEachTeamTwice === 'boolean' ? loadedSavedState.league.playEachTeamTwice : false,
+              zoneSettings: (loadedSavedState.league.zoneSettings || []).map(zs => ({
+                id: zs.id || `zone-${Date.now()}-${Math.random().toString(36).substring(2,7)}`,
+                name: zs.name || 'Zona sin nombre',
+                startPosition: typeof zs.startPosition === 'number' ? zs.startPosition : (typeof (zs as any).positions === 'number' ? 1 : 0), // Basic migration attempt
+                endPosition: typeof zs.endPosition === 'number' ? zs.endPosition : (typeof (zs as any).positions === 'number' ? (zs as any).positions : 0), // Basic migration attempt
+                color: zs.color || '#000000',
+                ...zs
+              })),
+            } : null,
+          };
+
         } catch (error) {
-          console.error("Failed to parse saved state from localStorage", error);
-          dispatch({ type: 'INITIALIZE_STATE', payload: initialState }); // fallback
+          console.error("Error al parsear el estado guardado, usando estado por defecto.", error);
+          statePayload = {
+            teams: [],
+            groups: [],
+            league: null,
+            knockoutRounds: [],
+          };
         }
-      } else {
-        dispatch({ type: 'INITIALIZE_STATE', payload: initialState }); // No saved state
       }
+      dispatch({ type: 'INITIALIZE_STATE', payload: statePayload as TournamentState });
     }
   }, []);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && state.isInitialized) { // Only save if initialized
+    if (typeof window !== 'undefined' && state.isInitialized) {
       localStorage.setItem('tournamentState', JSON.stringify(state));
     }
   }, [state]);
 
   if (!state.isInitialized) {
-    return <div className="flex justify-center items-center h-screen"><p>Loading tournament data...</p></div>;
+    return <div className="flex justify-center items-center h-screen"><p>Cargando datos del torneo...</p></div>;
   }
 
   return (
@@ -422,23 +669,28 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 export const useTournamentState = () => {
   const context = useContext(TournamentStateContext);
   if (context === undefined) {
-    throw new Error('useTournamentState must be used within a TournamentProvider');
+    throw new Error('useTournamentState debe ser usado dentro de un TournamentProvider');
   }
   const getTeamById = (teamId: string): Team | undefined => context.teams.find(t => t.id === teamId);
-  
+
   const getGroupStandings = (groupId: string): GroupTeamStats[] => {
     const group = context.groups.find(g => g.id === groupId);
     if (!group) return [];
-    return calculateGroupStandings(group, context.teams);
+    return calculateStandings(group, context.teams);
   };
 
-  return { ...context, getTeamById, getGroupStandings };
+  const getLeagueStandings = (): GroupTeamStats[] => {
+    if (!context.league) return [];
+    return calculateStandings(context.league, context.teams);
+  };
+
+  return { ...context, getTeamById, getGroupStandings, getLeagueStandings };
 };
 
 export const useTournamentDispatch = () => {
   const context = useContext(TournamentDispatchContext);
   if (context === undefined) {
-    throw new Error('useTournamentDispatch must be used within a TournamentProvider');
+    throw new Error('useTournamentDispatch debe ser usado dentro de un TournamentProvider');
   }
   return context;
 };
@@ -449,4 +701,3 @@ export const useIsClient = () => {
   return isClient;
 }
 
-    

@@ -1,13 +1,14 @@
+
 "use client";
 import React, { useState, useMemo } from 'react';
 import { useTournamentState, useTournamentDispatch, useIsClient } from '@/components/TournamentContext';
-import type { Group, Team, Match, GroupTeamStats } from '@/types';
+import type { Group, Team, Match, GroupTeamStats, LeagueZoneSetting } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { PlusCircle, Trash2, Users, ListChecks, Swords, Save, XCircle, Repeat } from 'lucide-react';
+import { PlusCircle, Trash2, Users, ListChecks, Swords, Save, XCircle, Repeat, Palette, Edit3 } from 'lucide-react';
 import { toast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -20,10 +21,30 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog";
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Label } from '@/components/ui/label';
+
 
 interface MatchScoreInput {
   [matchId: string]: { team1Score: string; team2Score: string };
+}
+
+interface ZoneFormState {
+  id?: string;
+  name: string;
+  startPosition: string;
+  endPosition: string;
+  color: string;
 }
 
 export default function GroupStageManagement() {
@@ -35,45 +56,51 @@ export default function GroupStageManagement() {
   const [matchScores, setMatchScores] = useState<MatchScoreInput>({});
   const isClient = useIsClient();
 
+  const [isZoneModalOpen, setIsZoneModalOpen] = useState(false);
+  const [currentZone, setCurrentZone] = useState<ZoneFormState>({ name: '', startPosition: '1', endPosition: '1', color: '#4CAF50' });
+  const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
+  const [activeGroupIdForZoneModal, setActiveGroupIdForZoneModal] = useState<string | null>(null);
+
+
   const handleCreateGroup = () => {
     if (groupName.trim() === '') {
-      toast({ title: "Error", description: "Group name cannot be empty.", variant: "destructive" });
+      toast({ title: "Error", description: "El nombre del grupo no puede estar vacío.", variant: "destructive" });
       return;
     }
     dispatch({ type: 'CREATE_GROUP', payload: { name: groupName.trim() } });
     setGroupName('');
-    toast({ title: "Success", description: `Group "${groupName.trim()}" created.` });
+    toast({ title: "Éxito", description: `Grupo "${groupName.trim()}" creado.` });
   };
 
   const handleDeleteGroup = (groupId: string) => {
     dispatch({ type: 'DELETE_GROUP', payload: { groupId } });
-    toast({ title: "Success", description: "Group deleted." });
+    toast({ title: "Éxito", description: "Grupo eliminado." });
   };
 
   const handleAddTeamToGroup = (groupId: string) => {
     const teamId = selectedTeamToAdd[groupId];
     if (!teamId) {
-      toast({ title: "Error", description: "Please select a team to add.", variant: "destructive" });
+      toast({ title: "Error", description: "Por favor, selecciona un equipo para añadir.", variant: "destructive" });
       return;
     }
     dispatch({ type: 'ADD_TEAM_TO_GROUP', payload: { groupId, teamId } });
-    setSelectedTeamToAdd(prev => ({ ...prev, [groupId]: '' })); // Reset select for this group
-    toast({ title: "Success", description: "Team added to group." });
+    setSelectedTeamToAdd(prev => ({ ...prev, [groupId]: '' }));
+    toast({ title: "Éxito", description: "Equipo añadido al grupo." });
   };
 
   const handleRemoveTeamFromGroup = (groupId: string, teamId: string) => {
     dispatch({ type: 'REMOVE_TEAM_FROM_GROUP', payload: { groupId, teamId } });
-    toast({ title: "Success", description: "Team removed from group." });
+    toast({ title: "Éxito", description: "Equipo eliminado del grupo." });
   };
-  
+
   const handleGenerateMatches = (groupId: string) => {
     const group = groups.find(g => g.id === groupId);
     if (group && group.teamIds.length < 2) {
-      toast({ title: "Error", description: "A group needs at least 2 teams to generate matches.", variant: "destructive" });
+      toast({ title: "Error", description: "Un grupo necesita al menos 2 equipos para generar partidos.", variant: "destructive" });
       return;
     }
     dispatch({ type: 'GENERATE_GROUP_MATCHES', payload: { groupId } });
-    toast({ title: "Success", description: "Matches generated (random order) for the group." });
+    toast({ title: "Éxito", description: "Partidos generados (orden aleatorio) para el grupo." });
   };
 
   const handleScoreChange = (groupId: string, matchId: string, team: 'team1' | 'team2', value: string) => {
@@ -89,26 +116,26 @@ export default function GroupStageManagement() {
   const handleUpdateMatchResult = (groupId: string, matchId: string) => {
     const scores = matchScores[matchId];
     if (!scores || scores.team1Score === undefined || scores.team2Score === undefined) {
-      toast({ title: "Error", description: "Please enter scores for both teams.", variant: "destructive" });
+      toast({ title: "Error", description: "Por favor, ingresa puntuaciones para ambos equipos.", variant: "destructive" });
       return;
     }
     const team1Score = parseInt(scores.team1Score, 10);
     const team2Score = parseInt(scores.team2Score, 10);
 
     if (isNaN(team1Score) || isNaN(team2Score) || team1Score < 0 || team2Score < 0) {
-      toast({ title: "Error", description: "Scores must be valid non-negative numbers.", variant: "destructive" });
+      toast({ title: "Error", description: "Las puntuaciones deben ser números válidos no negativos.", variant: "destructive" });
       return;
     }
     dispatch({ type: 'UPDATE_GROUP_MATCH_RESULT', payload: { groupId, matchId, team1Score, team2Score } });
-    toast({ title: "Success", description: "Match result updated." });
+    toast({ title: "Éxito", description: "Resultado del partido actualizado." });
   };
-  
-  const getTeamName = (teamId: string) => teams.find(t => t.id === teamId)?.name || 'Unknown Team';
+
+  const getTeamName = (teamId: string) => teams.find(t => t.id === teamId)?.name || 'Equipo Desconocido';
 
   const getGroupStandings = useMemo(() => (groupId: string): GroupTeamStats[] => {
     const group = groups.find(g => g.id === groupId);
     if (!group) return [];
-  
+
     const statsMap = new Map<string, GroupTeamStats>();
     group.teamIds.forEach(teamId => {
       statsMap.set(teamId, {
@@ -118,16 +145,16 @@ export default function GroupStageManagement() {
         gf: 0, ga: 0, gd: 0, points: 0,
       });
     });
-  
+
     group.matches.forEach(match => {
       if (match.played && match.team1Score !== null && match.team2Score !== null) {
         const team1Stats = statsMap.get(match.team1Id)!;
         const team2Stats = statsMap.get(match.team2Id)!;
-  
+
         team1Stats.played++; team2Stats.played++;
         team1Stats.gf += match.team1Score; team1Stats.ga += match.team2Score;
         team2Stats.gf += match.team2Score; team2Stats.ga += match.team1Score;
-  
+
         if (match.team1Score > match.team2Score) {
           team1Stats.won++; team1Stats.points += 3; team2Stats.lost++;
         } else if (match.team1Score < match.team2Score) {
@@ -138,7 +165,7 @@ export default function GroupStageManagement() {
         }
       }
     });
-  
+
     const standings = Array.from(statsMap.values());
     standings.forEach(stat => stat.gd = stat.gf - stat.ga);
     return standings.sort((a, b) => b.points - a.points || b.gd - a.gd || b.gf - a.gf || a.teamName.localeCompare(b.teamName));
@@ -147,26 +174,102 @@ export default function GroupStageManagement() {
   const handleCreateRandomGroups = () => {
     const count = parseInt(numRandomGroups, 10);
     if (isNaN(count) || count <= 0) {
-      toast({ title: "Error", description: "Please enter a valid number of groups.", variant: "destructive" });
+      toast({ title: "Error", description: "Por favor, ingresa un número válido de grupos.", variant: "destructive" });
       return;
     }
     if (teams.length === 0) {
-       toast({ title: "Error", description: "No teams available to create groups. Please add teams first.", variant: "destructive" });
+       toast({ title: "Error", description: "No hay equipos disponibles para crear grupos. Por favor, añade equipos primero.", variant: "destructive" });
       return;
     }
      if (teams.length < count) {
-      toast({ title: "Error", description: `Not enough teams (have ${teams.length}, need at least ${count}) to create ${count} groups.`, variant: "destructive" });
+      toast({ title: "Error", description: `No hay suficientes equipos (tienes ${teams.length}, se necesitan al menos ${count}) para crear ${count} grupos.`, variant: "destructive" });
       return;
     }
-    dispatch({ type: 'RANDOMLY_CREATE_GROUPS_AND_ASSIGN_TEAMS', payload: { numGroups: count, groupNamePrefix: "Random Group" } });
-    toast({ title: "Success", description: `${count} random groups created and teams assigned.` });
-    setNumRandomGroups('2'); 
+    dispatch({ type: 'RANDOMLY_CREATE_GROUPS_AND_ASSIGN_TEAMS', payload: { numGroups: count, groupNamePrefix: "Grupo Aleatorio" } });
+    toast({ title: "Éxito", description: `${count} grupos aleatorios creados y equipos asignados.` });
+    setNumRandomGroups('2');
+  };
+
+  const openZoneModalForGroupNew = (groupId: string) => {
+    setActiveGroupIdForZoneModal(groupId);
+    setEditingZoneId(null);
+    setCurrentZone({ name: '', startPosition: '1', endPosition: '1', color: '#4CAF50' });
+    setIsZoneModalOpen(true);
+  };
+
+  const openZoneModalForGroupEdit = (groupId: string, zone: LeagueZoneSetting) => {
+    setActiveGroupIdForZoneModal(groupId);
+    setEditingZoneId(zone.id);
+    setCurrentZone({
+      id: zone.id,
+      name: zone.name,
+      startPosition: zone.startPosition.toString(),
+      endPosition: zone.endPosition.toString(),
+      color: zone.color
+    });
+    setIsZoneModalOpen(true);
+  };
+
+  const handleSaveGroupZone = () => {
+    if (!activeGroupIdForZoneModal) return;
+
+    const { name, startPosition: startStr, endPosition: endStr, color } = currentZone;
+    const startPosNum = parseInt(startStr, 10);
+    let endPosNum = parseInt(endStr, 10);
+
+    if (name.trim() === '') {
+      toast({ title: "Error", description: "El nombre de la zona no puede estar vacío.", variant: "destructive" });
+      return;
+    }
+    if (isNaN(startPosNum) || startPosNum <= 0) {
+      toast({ title: "Error", description: "La posición inicial debe ser un número positivo válido.", variant: "destructive" });
+      return;
+    }
+     if (endStr.trim() === '' || isNaN(endPosNum)) {
+      endPosNum = startPosNum;
+    } else if (endPosNum <= 0) {
+        toast({ title: "Error", description: "La posición final debe ser un número positivo válido si se especifica.", variant: "destructive" });
+        return;
+    }
+    if (startPosNum > endPosNum) {
+      toast({ title: "Error", description: "La posición inicial no puede ser mayor que la posición final.", variant: "destructive" });
+      return;
+    }
+
+    const zoneData = { name: name.trim(), startPosition: startPosNum, endPosition: endPosNum, color };
+
+    if (editingZoneId) {
+      dispatch({ type: 'EDIT_GROUP_ZONE', payload: { groupId: activeGroupIdForZoneModal, zone: { id: editingZoneId, ...zoneData } } });
+      toast({ title: "Éxito", description: "Zona de clasificación del grupo actualizada." });
+    } else {
+      dispatch({ type: 'ADD_GROUP_ZONE', payload: { groupId: activeGroupIdForZoneModal, ...zoneData } });
+      toast({ title: "Éxito", description: "Zona de clasificación añadida al grupo." });
+    }
+    setIsZoneModalOpen(false);
+    setEditingZoneId(null);
+    setActiveGroupIdForZoneModal(null);
+  };
+
+  const handleDeleteGroupZone = (groupId: string, zoneId: string) => {
+    dispatch({ type: 'DELETE_GROUP_ZONE', payload: { groupId, zoneId } });
+    toast({ title: "Éxito", description: "Zona de clasificación del grupo eliminada." });
+  };
+
+  const getZoneForGroupPosition = (group: Group, position: number): LeagueZoneSetting | undefined => {
+    if (!group.zoneSettings) return undefined;
+    const sortedZones = [...group.zoneSettings].sort((a,b) => {
+      if (a.startPosition !== b.startPosition) {
+        return a.startPosition - b.startPosition;
+      }
+      return a.endPosition - b.endPosition;
+    });
+    return sortedZones.find(zone => position >= zone.startPosition && position <= zone.endPosition);
   };
 
 
   if (!isClient) {
      return <Card className="w-full max-w-4xl mx-auto mt-6">
-      <CardHeader><CardTitle>Loading Group Stage...</CardTitle></CardHeader>
+      <CardHeader><CardTitle>Cargando Fase de Grupos...</CardTitle></CardHeader>
       <CardContent><div className="animate-pulse h-20 bg-muted rounded-md w-full"></div></CardContent>
     </Card>;
   }
@@ -175,11 +278,11 @@ export default function GroupStageManagement() {
     <div className="space-y-8">
       <Card className="w-full max-w-md mx-auto">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 font-headline">
-            <Repeat className="h-6 w-6 text-primary" /> Create Random Groups
+          <CardTitle className="flex items-center gap-2 font-headline text-xl sm:text-2xl">
+            <Repeat className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Crear Grupos Aleatorios
           </CardTitle>
           <CardDescription>
-            Automatically create a specified number of groups and randomly assign available teams to them. Matches will also be generated randomly.
+            Crea automáticamente un número específico de grupos y asigna equipos disponibles aleatoriamente. Los partidos también se generarán aleatoriamente.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -188,111 +291,109 @@ export default function GroupStageManagement() {
               type="number"
               value={numRandomGroups}
               onChange={(e) => setNumRandomGroups(e.target.value)}
-              placeholder="Number of groups"
+              placeholder="Número de grupos"
               min="1"
             />
-            <Button onClick={handleCreateRandomGroups} aria-label="Create random groups">
-              <Repeat className="mr-2 h-4 w-4" /> Generate Random Groups
+            <Button onClick={handleCreateRandomGroups} aria-label="Crear grupos aleatorios">
+              <Repeat className="mr-2 h-4 w-4" /> Generar Grupos Aleatorios
             </Button>
           </div>
         </CardContent>
       </Card>
-      
+
       <Card className="w-full max-w-md mx-auto">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 font-headline">
-            <PlusCircle className="h-6 w-6 text-primary" /> Create New Group Manually
+          <CardTitle className="flex items-center gap-2 font-headline text-xl sm:text-2xl">
+            <PlusCircle className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Crear Nuevo Grupo Manualmente
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <Input
               type="text"
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
-              placeholder="Enter group name (e.g., Group A)"
+              placeholder="Ingresa el nombre del grupo (ej., Grupo A)"
               className="flex-grow"
               onKeyPress={(e) => e.key === 'Enter' && handleCreateGroup()}
             />
-            <Button onClick={handleCreateGroup} aria-label="Create group">
-              <PlusCircle className="mr-2 h-4 w-4" /> Create
+            <Button onClick={handleCreateGroup} aria-label="Crear grupo" className="w-full sm:w-auto">
+              <PlusCircle className="mr-2 h-4 w-4" /> Crear
             </Button>
           </div>
         </CardContent>
       </Card>
 
       {groups.length === 0 && (
-        <p className="text-muted-foreground text-center mt-6">No groups created yet. Create a group to manage teams and matches.</p>
+        <p className="text-muted-foreground text-center mt-6">Aún no se han creado grupos. Crea un grupo para gestionar equipos y partidos.</p>
       )}
 
       {groups.map((group) => (
         <Card key={group.id} className="w-full max-w-4xl mx-auto shadow-lg">
-          <CardHeader className="flex flex-row justify-between items-center">
+          <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
             <div>
-              <CardTitle className="font-headline text-2xl text-primary">{group.name}</CardTitle>
-              <CardDescription>Manage teams, matches, and standings for this group.</CardDescription>
+              <CardTitle className="font-headline text-xl sm:text-2xl text-primary">{group.name}</CardTitle>
+              <CardDescription>Gestiona equipos, partidos y clasificaciones para este grupo.</CardDescription>
             </div>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                 <Button variant="destructive" size="sm" aria-label={`Delete group ${group.name}`}>
-                  <Trash2 className="mr-1 h-4 w-4" /> Delete Group
+                 <Button variant="destructive" size="sm" aria-label={`Eliminar grupo ${group.name}`} className="w-full sm:w-auto">
+                  <Trash2 className="mr-1 h-4 w-4" /> Eliminar Grupo
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+                  <AlertDialogTitle>Confirmar Eliminación</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Are you sure you want to delete group "{group.name}"? All its teams and matches will be removed.
+                    ¿Estás seguro de que quieres eliminar el grupo "{group.name}"? Todos sus equipos y partidos serán eliminados.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => handleDeleteGroup(group.id)}>Delete</AlertDialogAction>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => handleDeleteGroup(group.id)}>Eliminar</AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Team Management for Group */}
             <div className="p-4 border rounded-md bg-background">
-              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><Users className="h-5 w-5 text-accent" /> Teams in Group</h3>
-              <div className="flex gap-2 mb-3">
+              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><Users className="h-5 w-5 text-accent" /> Equipos en el Grupo</h3>
+              <div className="flex flex-col sm:flex-row gap-2 mb-3">
                 <Select
                   value={selectedTeamToAdd[group.id] || ''}
                   onValueChange={(value) => setSelectedTeamToAdd(prev => ({ ...prev, [group.id]: value }))}
                 >
                   <SelectTrigger className="flex-grow">
-                    <SelectValue placeholder="Select team to add" />
+                    <SelectValue placeholder="Selecciona equipo para añadir" />
                   </SelectTrigger>
                   <SelectContent>
                     {teams.filter(t => !group.teamIds.includes(t.id)).map(team => (
                       <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
                     ))}
-                     {teams.filter(t => !group.teamIds.includes(t.id)).length === 0 && <p className="p-2 text-sm text-muted-foreground">No more teams to add.</p>}
+                     {teams.filter(t => !group.teamIds.includes(t.id)).length === 0 && <p className="p-2 text-sm text-muted-foreground">No hay más equipos para añadir.</p>}
                   </SelectContent>
                 </Select>
-                <Button onClick={() => handleAddTeamToGroup(group.id)} size="sm" aria-label="Add selected team to group">Add Team</Button>
+                <Button onClick={() => handleAddTeamToGroup(group.id)} size="sm" aria-label="Añadir equipo seleccionado al grupo" className="w-full sm:w-auto">Añadir Equipo</Button>
               </div>
               {group.teamIds.length > 0 ? (
                 <ul className="space-y-1 text-sm">
                   {group.teamIds.map(teamId => (
                     <li key={teamId} className="flex justify-between items-center p-1.5 bg-secondary/30 rounded">
                       {getTeamName(teamId)}
-                      <Button onClick={() => handleRemoveTeamFromGroup(group.id, teamId)} variant="ghost" size="icon" className="h-6 w-6" aria-label={`Remove team ${getTeamName(teamId)} from group`}>
+                      <Button onClick={() => handleRemoveTeamFromGroup(group.id, teamId)} variant="ghost" size="icon" className="h-6 w-6" aria-label={`Eliminar equipo ${getTeamName(teamId)} del grupo`}>
                         <XCircle className="h-4 w-4 text-destructive" />
                       </Button>
                     </li>
                   ))}
                 </ul>
-              ) : <p className="text-xs text-muted-foreground">No teams in this group yet.</p>}
+              ) : <p className="text-xs text-muted-foreground">Aún no hay equipos en este grupo.</p>}
             </div>
 
-            {/* Match Generation & List */}
             <div className="p-4 border rounded-md bg-background">
-              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><Swords className="h-5 w-5 text-accent" /> Matches (Random Order)</h3>
+              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><Swords className="h-5 w-5 text-accent" /> Partidos (Orden Aleatorio)</h3>
               {group.teamIds.length >= 2 && (
-                 <Button onClick={() => handleGenerateMatches(group.id)} className="w-full mb-3" variant="outline" aria-label="Generate or Re-generate matches for group">
-                  {group.matches.length > 0 ? "Re-generate Matches (Random Order)" : "Generate Matches (Random Order)"}
+                 <Button onClick={() => handleGenerateMatches(group.id)} className="w-full mb-3" variant="outline" aria-label="Generar o Re-generar partidos para el grupo">
+                  {group.matches.length > 0 ? "Re-generar Partidos (Orden Aleatorio)" : "Generar Partidos (Orden Aleatorio)"}
                 </Button>
               )}
               {group.matches.length > 0 ? (
@@ -300,15 +401,15 @@ export default function GroupStageManagement() {
                   <ul className="space-y-2">
                     {group.matches.map(match => (
                       <li key={match.id} className="p-2.5 border rounded-md bg-secondary/30 text-sm">
-                        <div className="flex justify-between items-center mb-1.5">
-                          <span><strong>{getTeamName(match.team1Id)}</strong> vs <strong>{getTeamName(match.team2Id)}</strong></span>
-                          {match.played && <span className="text-xs px-1.5 py-0.5 bg-green-200 text-green-800 rounded-full">Played</span>}
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-1.5">
+                          <span className="break-all"><strong>{getTeamName(match.team1Id)}</strong> vs <strong>{getTeamName(match.team2Id)}</strong></span>
+                          {match.played && <span className="text-xs px-1.5 py-0.5 bg-green-200 text-green-800 rounded-full mt-1 sm:mt-0">Jugado</span>}
                         </div>
-                        <div className="flex gap-2 items-center">
+                        <div className="flex flex-wrap gap-2 items-center">
                           <Input
                             type="number"
                             min="0"
-                            placeholder="Score 1"
+                            placeholder="Res. 1"
                             value={matchScores[match.id]?.team1Score ?? match.team1Score ?? ''}
                             onChange={(e) => handleScoreChange(group.id, match.id, 'team1', e.target.value)}
                             className="w-20 h-8 text-xs"
@@ -318,62 +419,218 @@ export default function GroupStageManagement() {
                           <Input
                             type="number"
                             min="0"
-                            placeholder="Score 2"
+                            placeholder="Res. 2"
                             value={matchScores[match.id]?.team2Score ?? match.team2Score ?? ''}
                             onChange={(e) => handleScoreChange(group.id, match.id, 'team2', e.target.value)}
                             className="w-20 h-8 text-xs"
                             disabled={match.played && (matchScores[match.id] === undefined)}
                           />
-                          <Button onClick={() => handleUpdateMatchResult(group.id, match.id)} size="sm" variant="outline" className="h-8 text-xs" aria-label="Save match score">
-                            <Save className="mr-1 h-3 w-3" /> Save
+                          <Button onClick={() => handleUpdateMatchResult(group.id, match.id)} size="sm" variant="outline" className="h-8 text-xs" aria-label="Guardar resultado del partido">
+                            <Save className="mr-1 h-3 w-3" /> Guardar
                           </Button>
                         </div>
                       </li>
                     ))}
                   </ul>
                 </ScrollArea>
-              ) : <p className="text-xs text-muted-foreground">No matches generated or teams insufficient.</p>}
+              ) : <p className="text-xs text-muted-foreground">No hay partidos generados o los equipos son insuficientes.</p>}
             </div>
 
-            {/* Standings Table */}
             <div className="p-4 border rounded-md bg-background">
-              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><ListChecks className="h-5 w-5 text-accent" /> Standings</h3>
+              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><ListChecks className="h-5 w-5 text-accent" /> Clasificación del Grupo</h3>
               {getGroupStandings(group.id).length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="font-bold">Team</TableHead>
-                      <TableHead className="text-center">P</TableHead>
-                      <TableHead className="text-center">W</TableHead>
-                      <TableHead className="text-center">D</TableHead>
-                      <TableHead className="text-center">L</TableHead>
-                      <TableHead className="text-center">GF</TableHead>
-                      <TableHead className="text-center">GA</TableHead>
-                      <TableHead className="text-center">GD</TableHead>
-                      <TableHead className="text-center font-bold">Pts</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {getGroupStandings(group.id).map(stat => (
-                      <TableRow key={stat.teamId}>
-                        <TableCell>{stat.teamName}</TableCell>
-                        <TableCell className="text-center">{stat.played}</TableCell>
-                        <TableCell className="text-center">{stat.won}</TableCell>
-                        <TableCell className="text-center">{stat.drawn}</TableCell>
-                        <TableCell className="text-center">{stat.lost}</TableCell>
-                        <TableCell className="text-center">{stat.gf}</TableCell>
-                        <TableCell className="text-center">{stat.ga}</TableCell>
-                        <TableCell className="text-center">{stat.gd}</TableCell>
-                        <TableCell className="text-center font-bold">{stat.points}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : <p className="text-xs text-muted-foreground">No standings to display. Add teams and record match results.</p>}
+                <>
+                  <ScrollArea className="max-w-full">
+                    <Table className="min-w-[600px] sm:min-w-full">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="font-bold w-[60px] text-center">#</TableHead>
+                          <TableHead className="font-bold">Equipo</TableHead>
+                          <TableHead className="text-center">PJ</TableHead>
+                          <TableHead className="text-center">PG</TableHead>
+                          <TableHead className="text-center">PE</TableHead>
+                          <TableHead className="text-center">PP</TableHead>
+                          <TableHead className="text-center">GF</TableHead>
+                          <TableHead className="text-center">GC</TableHead>
+                          <TableHead className="text-center">DG</TableHead>
+                          <TableHead className="text-center font-bold">Pts</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {getGroupStandings(group.id).map((stat, index) => {
+                          const position = index + 1;
+                          const zone = getZoneForGroupPosition(group, position);
+                          return (
+                            <TableRow key={stat.teamId}>
+                              <TableCell className="text-center font-medium relative pl-6">
+                                 {zone && (
+                                  <span
+                                    className="absolute left-0 top-0 bottom-0 w-1.5"
+                                    style={{ backgroundColor: zone.color }}
+                                    aria-hidden="true"
+                                  ></span>
+                                )}
+                                {position}.
+                              </TableCell>
+                              <TableCell className="truncate max-w-[100px] sm:max-w-xs">{stat.teamName}</TableCell>
+                              <TableCell className="text-center">{stat.played}</TableCell>
+                              <TableCell className="text-center">{stat.won}</TableCell>
+                              <TableCell className="text-center">{stat.drawn}</TableCell>
+                              <TableCell className="text-center">{stat.lost}</TableCell>
+                              <TableCell className="text-center">{stat.gf}</TableCell>
+                              <TableCell className="text-center">{stat.ga}</TableCell>
+                              <TableCell className="text-center">{stat.gd}</TableCell>
+                              <TableCell className="text-center font-bold">{stat.points}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                  {group.zoneSettings && group.zoneSettings.length > 0 && (
+                    <div className="mt-4 p-3 border rounded-md bg-secondary/30">
+                      <h4 className="text-md font-semibold mb-2 text-secondary-foreground">Clasificaciones:</h4>
+                      <ul className="space-y-1">
+                        {group.zoneSettings.map(zone => (
+                          <li key={`legend-group-${group.id}-${zone.id}`} className="flex items-center gap-2 text-sm text-secondary-foreground">
+                            <span
+                              className="h-3 w-3 rounded-sm inline-block border border-border"
+                              style={{ backgroundColor: zone.color }}
+                              aria-hidden="true"
+                            ></span>
+                            <span>{zone.name} (Pos. {zone.startPosition}{zone.startPosition !== zone.endPosition ? `-${zone.endPosition}` : ''})</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
+              ) : <p className="text-xs text-muted-foreground">No hay clasificaciones para mostrar. Añade equipos y registra resultados de partidos.</p>}
+            </div>
+
+            <div className="p-4 border rounded-md bg-background">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-lg font-semibold flex items-center gap-2"><Palette className="h-5 w-5 text-accent" /> Zonas de Clasificación del Grupo</h3>
+                <Button size="sm" onClick={() => openZoneModalForGroupNew(group.id)}><PlusCircle className="mr-2 h-4 w-4"/>Añadir Zona al Grupo</Button>
+              </div>
+              {(group.zoneSettings || []).length > 0 ? (
+                <div className="space-y-2">
+                  {(group.zoneSettings || []).map(zone => (
+                    <div key={zone.id} className="flex items-center justify-between p-2 bg-secondary/30 rounded-md">
+                      <div className="flex items-center gap-2">
+                        <span className="h-4 w-4 rounded-sm border border-border" style={{ backgroundColor: zone.color }}></span>
+                        <span>{zone.name} (Pos. {zone.startPosition}{zone.startPosition !== zone.endPosition ? `-${zone.endPosition}` : ''})</span>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openZoneModalForGroupEdit(group.id, zone)}>
+                          <Edit3 className="h-4 w-4" />
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Confirmar Eliminación</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                ¿Estás seguro de que quieres eliminar la zona "{zone.name}" de este grupo?
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDeleteGroupZone(group.id, zone.id)}>Eliminar</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No se han configurado zonas de clasificación para este grupo.</p>
+              )}
             </div>
           </CardContent>
         </Card>
       ))}
+
+       <Dialog open={isZoneModalOpen} onOpenChange={(isOpen) => {
+        setIsZoneModalOpen(isOpen);
+        if (!isOpen) setActiveGroupIdForZoneModal(null);
+      }}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>{editingZoneId ? 'Editar Zona de Clasificación del Grupo' : 'Añadir Nueva Zona al Grupo'}</DialogTitle>
+            <DialogDescription>
+              Define un nombre, el rango de posiciones (inicio y fin), y un color para esta zona específica del grupo.
+              Para marcar una sola posición, puedes dejar "Pos. Final" vacío o ingresar el mismo número que en "Pos. Inicial".
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="groupZoneName" className="text-right">
+                Nombre
+              </Label>
+              <Input
+                id="groupZoneName"
+                value={currentZone.name}
+                onChange={(e) => setCurrentZone({ ...currentZone, name: e.target.value })}
+                className="col-span-3"
+                placeholder="Ej: Clasifica a Octavos"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="groupZoneStartPosition" className="text-right">
+                Pos. Inicial
+              </Label>
+              <Input
+                id="groupZoneStartPosition"
+                type="number"
+                min="1"
+                value={currentZone.startPosition}
+                onChange={(e) => setCurrentZone({ ...currentZone, startPosition: e.target.value })}
+                className="col-span-3"
+                placeholder="Ej: 1"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="groupZoneEndPosition" className="text-right">
+                Pos. Final
+              </Label>
+              <Input
+                id="groupZoneEndPosition"
+                type="number"
+                min="1"
+                value={currentZone.endPosition}
+                onChange={(e) => setCurrentZone({ ...currentZone, endPosition: e.target.value })}
+                className="col-span-3"
+                placeholder="Ej: 2 (o dejar vacío)"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="groupZoneColor" className="text-right">
+                Color
+              </Label>
+              <Input
+                id="groupZoneColor"
+                type="color"
+                value={currentZone.color}
+                onChange={(e) => setCurrentZone({ ...currentZone, color: e.target.value })}
+                className="col-span-3 h-10 p-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+                <Button type="button" variant="outline" onClick={() => setActiveGroupIdForZoneModal(null)}>Cancelar</Button>
+            </DialogClose>
+            <Button type="button" onClick={handleSaveGroupZone}>Guardar Zona</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
