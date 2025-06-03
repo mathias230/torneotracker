@@ -2,7 +2,7 @@
 "use client";
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { useTournamentDispatch } from '@/components/TournamentContext';
+import { useTournamentDispatch, useTournamentState } from '@/components/TournamentContext';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,14 +14,27 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Zap, Sun, Moon } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
+import { Zap, Sun, Moon, KeyRound, LogOut } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import React, { useEffect, useState } from 'react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { toast } from "@/hooks/use-toast";
+
 
 export default function AppHeader() {
   const dispatch = useTournamentDispatch();
+  const { isAdminMode } = useTournamentState(); // Get isAdminMode from context
   const [mounted, setMounted] = useState(false);
   const { theme, setTheme, resolvedTheme } = useTheme();
+
+  // IMPORTANT: For production, this code should be stored securely, e.g., an environment variable
+  // and ideally validated on a backend if possible for true security.
+  const ADMIN_CODE = "SUPER_SECRET";
+  const [adminCodeInput, setAdminCodeInput] = useState('');
+  const [isAdminCodeDialogOpen, setIsAdminCodeDialogOpen] = useState(false);
+
 
   useEffect(() => {
     setMounted(true);
@@ -29,7 +42,28 @@ export default function AppHeader() {
 
   const handleReset = () => {
     dispatch({ type: 'RESET_TOURNAMENT' });
+     toast({
+      title: "Datos Reiniciados",
+      description: "Todos los datos del torneo han sido eliminados.",
+    });
   };
+
+  const handleAdminCodeCheck = () => {
+    if (adminCodeInput === ADMIN_CODE) {
+      dispatch({ type: 'SET_ADMIN_MODE', payload: true });
+      toast({ title: 'Modo Admin Activado', description: 'Ahora tienes acceso a las funciones de administración.' });
+      setIsAdminCodeDialogOpen(false);
+      setAdminCodeInput('');
+    } else {
+      toast({ title: 'Código Incorrecto', description: 'El código de administrador no es válido.', variant: 'destructive' });
+    }
+  };
+
+  const handleExitAdminMode = () => {
+    dispatch({ type: 'SET_ADMIN_MODE', payload: false });
+    toast({ title: 'Modo Admin Desactivado', description: 'Has salido del modo de administración.' });
+  };
+
 
   const renderThemeToggleButton = () => {
     if (!mounted) {
@@ -60,24 +94,74 @@ export default function AppHeader() {
         </Link>
         <div className="flex items-center gap-2">
           {renderThemeToggleButton()}
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="sm">Reiniciar Datos del Torneo</Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>¿Estás absolutamente seguro?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Esta acción no se puede deshacer. Esto eliminará permanentemente todos
-                  los datos del torneo, incluyendo equipos, grupos y resultados de partidos.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={handleReset}>Sí, reiniciar datos</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+
+          {isAdminMode ? (
+            <Button variant="outline" size="sm" onClick={handleExitAdminMode}>
+              <LogOut className="mr-2 h-4 w-4" /> Salir de Modo Admin
+            </Button>
+          ) : (
+            <Dialog open={isAdminCodeDialogOpen} onOpenChange={(isOpen) => {
+              setIsAdminCodeDialogOpen(isOpen);
+              if (!isOpen) setAdminCodeInput(''); 
+            }}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <KeyRound className="mr-2 h-4 w-4" /> Acceder como Admin
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Acceso de Administrador</DialogTitle>
+                  <DialogDescription>
+                    Ingresa el código secreto para acceder a las funciones de administración.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="admin-code" className="text-right">
+                      Código
+                    </Label>
+                    <Input
+                      id="admin-code"
+                      type="password"
+                      value={adminCodeInput}
+                      onChange={(e) => setAdminCodeInput(e.target.value)}
+                      className="col-span-3"
+                      onKeyPress={(e) => e.key === 'Enter' && handleAdminCodeCheck()}
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <DialogClose asChild>
+                     <Button type="button" variant="outline">Cancelar</Button>
+                  </DialogClose>
+                  <Button type="button" onClick={handleAdminCodeCheck}>Verificar</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+
+          {/* Conditional rendering for the Reset Tournament button */}
+          {isAdminMode && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm">Reiniciar Datos del Torneo</Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>¿Estásolutamente seguro?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Esta acción no se puede deshacer. Esto eliminará permanentemente todos
+                    los datos del torneo, incluyendo equipos, grupos y resultados de partidos.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleReset}>Sí, reiniciar datos</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
       </div>
     </header>
