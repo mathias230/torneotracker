@@ -4,14 +4,14 @@ import type { Dispatch } from 'react';
 import React, { createContext, useContext, useReducer, useEffect, useState } from 'react';
 import type { TournamentState, TournamentAction, Team, Group, Match, GroupTeamStats, KnockoutMatch, League, LeagueZoneSetting } from '@/types';
 import { toast } from "@/hooks/use-toast";
-import { db } from '@/lib/firebaseConfig'; // Importar la instancia de Firestore
+import { db } from '../lib/firebaseConfig'; // CHANGED: Using relative path
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 const initialState: TournamentState = {
   teams: [],
   groups: [],
   league: null,
-  knockoutRounds: {}, // Changed from []
+  knockoutRounds: {}, 
   isInitialized: false,
   isAdminMode: false, 
 };
@@ -190,7 +190,7 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
             newMatch.team2Name = "Equipo Eliminado";
           }
           return newMatch;
-        }).filter(match => match.team1Id !== teamIdToDelete && match.team2Id !== teamIdToDelete); // This filter might be redundant if placeholders are used
+        }).filter(match => match.team1Id !== teamIdToDelete && match.team2Id !== teamIdToDelete); 
       });
 
 
@@ -651,7 +651,7 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
       if (typeof window !== 'undefined') {
         localStorage.removeItem('tournamentState');
       }
-      newState = { ...initialState, isAdminMode: false, isInitialized: true };
+      newState = { ...initialState, isAdminMode: false, isInitialized: true }; // Mantenemos isAdminMode para que el usuario no tenga que volver a ingresar el código
       const tournamentDocRef = doc(db, TOURNAMENT_DOC_PATH);
       deleteDoc(tournamentDocRef).then(() => {
         console.log("TournamentContext [Firestore RESET]: Tournament data deleted from Firestore");
@@ -688,7 +688,7 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                                       loadedSavedState.knockoutRounds !== null && 
                                       !Array.isArray(loadedSavedState.knockoutRounds))
             ? loadedSavedState.knockoutRounds
-            : initialState.knockoutRounds; // Default to empty object if not map-like or missing
+            : initialState.knockoutRounds; 
 
           statePayload = {
             teams: loadedSavedState.teams || initialState.teams,
@@ -795,3 +795,5 @@ export const useIsClient = () => {
   useEffect(() => setIsClient(true), []);
   return isClient;
 }
+
+    
