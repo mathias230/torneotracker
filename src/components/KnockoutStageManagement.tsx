@@ -1,6 +1,6 @@
 
 "use client";
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useTournamentState, useTournamentDispatch, useIsClient } from '@/components/TournamentContext';
 import type { KnockoutMatch } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -29,13 +29,27 @@ const roundOptions = [
 ];
 
 export default function KnockoutStageManagement() {
-  const { teams, knockoutRounds, isAdminMode } = useTournamentState();
+  const { teams, knockoutRounds: knockoutRoundsMap, isAdminMode } = useTournamentState();
   const dispatch = useTournamentDispatch();
   const [startingRoundValue, setStartingRoundValue] = useState<string>('8'); 
   const [selectedTeamsForBracket, setSelectedTeamsForBracket] = useState<string[]>([]);
   const [matchScores, setMatchScores] = useState<KnockoutScoreInput>({});
   const isClient = useIsClient();
   const bracketRef = useRef<HTMLDivElement>(null);
+
+  const roundsAsArray: KnockoutMatch[][] = useMemo(() => {
+    if (!knockoutRoundsMap || Object.keys(knockoutRoundsMap).length === 0) return [];
+    return Object.keys(knockoutRoundsMap)
+      .sort((a, b) => parseInt(a) - parseInt(b)) // Sort by round index (key)
+      .map(key => knockoutRoundsMap[key]);
+  }, [knockoutRoundsMap]);
+
+  // Filter for rounds that actually have matches to display
+  // The champion display (a match with team2Id: null) is considered a playable round
+  const playableRounds: KnockoutMatch[][] = useMemo(() => {
+    return roundsAsArray.filter(round => round.length > 0);
+  }, [roundsAsArray]);
+
 
   const handleCreateBracket = () => {
     const numTeams = parseInt(startingRoundValue, 10);
@@ -104,16 +118,6 @@ export default function KnockoutStageManagement() {
   };
 
   const currentRequiredTeams = parseInt(startingRoundValue, 10);
-
-  const playableRounds = knockoutRounds.filter(round => {
-    if (round.length === 1 && round[0]) {
-      const match = round[0];
-      if (knockoutRounds.length > 0 && round === knockoutRounds[knockoutRounds.length - 1] && !match.team2Id) {
-         if (knockoutRounds.length > 1) return false; 
-      }
-    }
-    return round.length > 0;
-  });
   
   const numberOfPlayableRounds = playableRounds.length;
 
@@ -214,9 +218,12 @@ export default function KnockoutStageManagement() {
           </CardHeader>
           <CardContent className="overflow-x-auto pb-6 pt-2">
             <div className="flex items-start space-x-4 sm:space-x-8 min-w-max" ref={bracketRef}>
-              {playableRounds.map((round, roundIndex) => {
-                
-                let roundTitleText = `Ronda ${roundIndex + 1}`; 
+              {playableRounds.map((round, roundArrayIndex) => { // roundArrayIndex is the index in playableRounds
+                 // The actual roundIndex for logic/titles comes from the first match in the round,
+                 // as playableRounds is already sorted.
+                const logicalRoundIndex = round[0]?.roundIndex ?? roundArrayIndex;
+
+                let roundTitleText = `Ronda ${logicalRoundIndex + 1}`; 
 
                 if (numberOfPlayableRounds === 1) { 
                     const match = round[0];
@@ -229,11 +236,11 @@ export default function KnockoutStageManagement() {
                         roundTitleText = "Final";
                     }
                 } else { 
-                    if (roundIndex === numberOfPlayableRounds - 1) roundTitleText = "Final";
-                    else if (roundIndex === numberOfPlayableRounds - 2) roundTitleText = "Semifinales";
-                    else if (roundIndex === numberOfPlayableRounds - 3) roundTitleText = "Cuartos de Final";
-                    else if (roundIndex === numberOfPlayableRounds - 4) roundTitleText = "Octavos de Final";
-                    else if (roundIndex === numberOfPlayableRounds - 5) roundTitleText = "Dieciseisavos de Final";
+                    if (logicalRoundIndex === numberOfPlayableRounds - 1) roundTitleText = "Final";
+                    else if (logicalRoundIndex === numberOfPlayableRounds - 2) roundTitleText = "Semifinales";
+                    else if (logicalRoundIndex === numberOfPlayableRounds - 3) roundTitleText = "Cuartos de Final";
+                    else if (logicalRoundIndex === numberOfPlayableRounds - 4) roundTitleText = "Octavos de Final";
+                    else if (logicalRoundIndex === numberOfPlayableRounds - 5) roundTitleText = "Dieciseisavos de Final";
 
                     if (roundTitleText === "Final" && round.length === 1) {
                         const match = round[0];
@@ -249,13 +256,13 @@ export default function KnockoutStageManagement() {
                 const isActualFinalMatchAndWon = roundTitleText.startsWith("Campeón:") && round.length === 1;
 
                 return (
-                  <div key={`round-${roundIndex}`} className="flex flex-col space-y-12 min-w-[250px] sm:min-w-[280px] pt-10 relative">
+                  <div key={`round-display-${logicalRoundIndex}`} className="flex flex-col space-y-12 min-w-[250px] sm:min-w-[280px] pt-10 relative">
                     <h3 className="text-md sm:text-lg font-semibold text-center text-accent absolute -top-0 left-0 right-0 whitespace-nowrap">
                        {roundTitleText}
                     </h3>
                     
                     <div className="space-y-16">
-                      {round.map((match, matchIndex) => {
+                      {round.map((match, matchIndexInCurrentVisualRound) => { // matchIndexInCurrentVisualRound is the index within this specific round array
                         const winnerId = match.played && match.team1Score !== null && match.team2Score !== null ? (match.team1Score > match.team2Score ? match.team1Id : match.team2Score > match.team1Score ? match.team2Id : null) : null;
                                               
                         const team1IsPlaceholder = !match.team1Id || match.team1Id.startsWith('winner-') || match.team1Id.startsWith('placeholder-');
@@ -358,11 +365,13 @@ export default function KnockoutStageManagement() {
                                 )}
                               </div>
                             )}
-                            {(roundIndex < numberOfPlayableRounds - 1) && ( 
+                            {/* Connector lines logic */}
+                            {(logicalRoundIndex < numberOfPlayableRounds - 1) && ( 
                               <>
                                 <div className="absolute top-1/2 -right-2 sm:-right-4 transform -translate-y-1/2 w-2 sm:w-4 h-px bg-border -z-10"></div>
-                                { ( playableRounds[roundIndex+1] && playableRounds[roundIndex+1][Math.floor(matchIndex/2)] ) &&
-                                  (matchIndex % 2 === 0 ? ( 
+                                {/* Check if there's a next round and a corresponding match to connect to */}
+                                { ( playableRounds[logicalRoundIndex+1] && playableRounds[logicalRoundIndex+1][Math.floor(matchIndexInCurrentVisualRound/2)] ) &&
+                                  (matchIndexInCurrentVisualRound % 2 === 0 ? ( 
                                     <div className="absolute top-1/2 -right-2 sm:-right-4 transform w-px bg-border -z-10" style={{height: 'calc(50% + 4rem)' , bottom: '0%'}}></div>
                                   ) : ( 
                                     <div className="absolute bottom-1/2 -right-2 sm:-right-4 transform w-px bg-border -z-10" style={{height: 'calc(50% + 4rem)' , top: '0%'}}></div>
@@ -370,7 +379,7 @@ export default function KnockoutStageManagement() {
                                 }
                               </>
                             )}
-                             {roundIndex > 0 && ( 
+                             {logicalRoundIndex > 0 && ( 
                                <div className="absolute top-1/2 -left-2 sm:-left-4 transform -translate-y-1/2 w-2 sm:w-4 h-px bg-border -z-10"></div>
                             )}
                           </div>

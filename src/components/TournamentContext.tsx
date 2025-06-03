@@ -11,7 +11,7 @@ const initialState: TournamentState = {
   teams: [],
   groups: [],
   league: null,
-  knockoutRounds: [],
+  knockoutRounds: {}, // Changed from []
   isInitialized: false,
   isAdminMode: false, 
 };
@@ -130,16 +130,15 @@ const TOURNAMENT_DOC_PATH = "tournaments_shared/default_tournament";
 
 const saveTournamentStateToFirestore = async (state: TournamentState) => {
   try {
-    // Destructure to exclude isInitialized if it's purely client-side and not meant for Firestore
     const { isInitialized, ...stateToSave } = state; 
     const tournamentDocRef = doc(db, TOURNAMENT_DOC_PATH);
     await setDoc(tournamentDocRef, stateToSave);
-    console.log("Tournament state saved to Firestore");
+    console.log("TournamentContext [Firestore SAVE]: Tournament state saved to Firestore", stateToSave);
   } catch (error) {
-    console.error("Error saving tournament state to Firestore:", error);
+    console.error("TournamentContext [Firestore SAVE ERROR]: Error saving tournament state to Firestore:", error);
     toast({
       title: "Error de Sincronización",
-      description: "No se pudo guardar el estado del torneo en la nube.",
+      description: "No se pudo guardar el estado del torneo en la nube. Ver consola para detalles.",
       variant: "destructive",
     });
   }
@@ -169,7 +168,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         const newLeagueTeamIds = state.league.teamIds.filter(id => id !== teamIdToDelete);
         if (newLeagueTeamIds.length < 2) {
           updatedLeague = null;
-          // Toast for league deletion due to team removal should be handled in the component triggering DELETE_TEAM
         } else {
           updatedLeague = {
             ...state.league,
@@ -178,11 +176,30 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
           };
         }
       }
+      
+      const updatedKnockoutRounds = { ...state.knockoutRounds };
+      Object.keys(updatedKnockoutRounds).forEach(roundKey => {
+        updatedKnockoutRounds[roundKey] = updatedKnockoutRounds[roundKey].map(match => {
+          let newMatch = { ...match };
+          if (match.team1Id === teamIdToDelete) {
+            newMatch.team1Id = `placeholder-deleted-${Date.now()}`;
+            newMatch.team1Name = "Equipo Eliminado";
+          }
+          if (match.team2Id === teamIdToDelete) {
+            newMatch.team2Id = `placeholder-deleted-${Date.now()}`;
+            newMatch.team2Name = "Equipo Eliminado";
+          }
+          return newMatch;
+        }).filter(match => match.team1Id !== teamIdToDelete && match.team2Id !== teamIdToDelete); // This filter might be redundant if placeholders are used
+      });
+
+
       newState = {
         ...state,
         teams: state.teams.filter(team => team.id !== teamIdToDelete),
         groups: updatedGroups,
         league: updatedLeague,
+        knockoutRounds: updatedKnockoutRounds,
         isAdminMode: state.isAdminMode,
       };
       break;
@@ -210,11 +227,14 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
             team2Name: match.team2Id === teamId ? newName : match.team2Name,
           }))
         } : null,
-        knockoutRounds: state.knockoutRounds.map(round => round.map(match => ({
-          ...match,
+        knockoutRounds: Object.keys(state.knockoutRounds).reduce((acc, roundKey) => {
+          acc[roundKey] = state.knockoutRounds[roundKey].map(match => ({
+            ...match,
             team1Name: match.team1Id === teamId ? newName : match.team1Name,
             team2Name: match.team2Id === teamId ? newName : match.team2Name,
-        }))),
+          }));
+          return acc;
+        }, {} as { [roundIndex: string]: KnockoutMatch[] }),
         isAdminMode: state.isAdminMode,
       };
       break;
@@ -294,11 +314,10 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
     case 'CREATE_KNOCKOUT_STAGE': {
       const { numTeams, selectedTeamIds } = action.payload;
       if (numTeams < 2 || (numTeams & (numTeams - 1)) !== 0) {
-        // Toast for error should be handled in the component dispatching
         return state; 
       }
 
-      const rounds: KnockoutMatch[][] = [];
+      const rounds: { [roundIndex: string]: KnockoutMatch[] } = {};
       let currentRoundTeams = selectedTeamIds.slice(0, numTeams);
 
       while(currentRoundTeams.length < numTeams) {
@@ -330,7 +349,7 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
                 matchIndexInRound: 0,
                 placeholder: !finalWinnerId || finalWinnerId.startsWith('winner-') ? "Campeón del Torneo" : undefined,
             });
-            rounds.push(roundMatches);
+            rounds[roundIndex.toString()] = roundMatches;
             break;
         }
 
@@ -354,7 +373,7 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
             placeholder: (!team1Id || team1Id.startsWith('winner-') || team1Id.startsWith('placeholder-') || !team2Id || team2Id.startsWith('winner-') || team2Id.startsWith('placeholder-')) ? "Esperando equipos" : undefined,
           });
         }
-        if(roundMatches.length > 0) rounds.push(roundMatches);
+        if(roundMatches.length > 0) rounds[roundIndex.toString()] = roundMatches;
 
         if (teamsInCurrentRound <= 1) break;
 
@@ -372,46 +391,68 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
     }
     case 'UPDATE_KNOCKOUT_MATCH_RESULT': {
       const { roundIndex, matchIndexInRound, team1Score, team2Score } = action.payload;
-      const newKnockoutRounds = state.knockoutRounds.map(r => r.map(m => ({...m})));
+      const roundKey = roundIndex.toString();
+      const nextRoundKey = (roundIndex + 1).toString();
 
-      const match = newKnockoutRounds[roundIndex]?.[matchIndexInRound];
-      if (!match || !match.team1Id || !match.team2Id) return state;
+      if (!state.knockoutRounds[roundKey] || !state.knockoutRounds[roundKey][matchIndexInRound]) {
+        return state;
+      }
+      const currentMatchToUpdate = state.knockoutRounds[roundKey][matchIndexInRound];
+      if (!currentMatchToUpdate.team1Id || !currentMatchToUpdate.team2Id) return state;
 
-      match.team1Score = team1Score;
-      match.team2Score = team2Score;
-      match.played = true;
+      const updatedRoundMatches = state.knockoutRounds[roundKey].map((m, idx) => {
+        if (idx === matchIndexInRound) {
+          return {
+            ...m,
+            team1Score,
+            team2Score,
+            played: true,
+          };
+        }
+        return m;
+      });
 
-      if (roundIndex < newKnockoutRounds.length - 1) {
-        const winnerId = team1Score > team2Score ? match.team1Id : match.team2Id;
+      const newKnockoutRounds = {
+        ...state.knockoutRounds,
+        [roundKey]: updatedRoundMatches,
+      };
 
+      const updatedMatchFromCurrentRound = updatedRoundMatches[matchIndexInRound];
+
+      if (newKnockoutRounds[nextRoundKey]) {
+        const winnerId = team1Score > team2Score ? updatedMatchFromCurrentRound.team1Id : updatedMatchFromCurrentRound.team2Id;
         let winnerName = 'A determinar';
         const foundWinnerTeam = state.teams.find(t => t.id === winnerId);
         if (foundWinnerTeam) {
             winnerName = foundWinnerTeam.name;
         } else if (typeof winnerId === 'string' && (winnerId.startsWith('winner-') || winnerId.startsWith('placeholder-'))) {
-             winnerName = (team1Score > team2Score ? match.team1Name : match.team2Name) || 'A determinar';
+             winnerName = (team1Score > team2Score ? updatedMatchFromCurrentRound.team1Name : updatedMatchFromCurrentRound.team2Name) || 'A determinar';
         } else {
-            winnerName = `Ganador de ${match.team1Name || 'partido'} vs ${match.team2Name || 'partido'}`;
+            winnerName = `Ganador de ${updatedMatchFromCurrentRound.team1Name || 'partido'} vs ${updatedMatchFromCurrentRound.team2Name || 'partido'}`;
         }
 
-        const nextRoundMatchIndex = Math.floor(matchIndexInRound / 2);
-        const nextMatch = newKnockoutRounds[roundIndex + 1]?.[nextRoundMatchIndex];
-
-        if (nextMatch) {
-          if (matchIndexInRound % 2 === 0) {
-            nextMatch.team1Id = winnerId;
-            nextMatch.team1Name = winnerName;
-          } else {
-            nextMatch.team2Id = winnerId;
-            nextMatch.team2Name = winnerName;
+        const nextRoundMatchIndexToUpdate = Math.floor(matchIndexInRound / 2);
+        
+        newKnockoutRounds[nextRoundKey] = newKnockoutRounds[nextRoundKey].map((m, idx) => {
+          if (idx === nextRoundMatchIndexToUpdate) {
+            const updatedNextMatch = { ...m };
+            if (matchIndexInRound % 2 === 0) {
+              updatedNextMatch.team1Id = winnerId;
+              updatedNextMatch.team1Name = winnerName;
+            } else {
+              updatedNextMatch.team2Id = winnerId;
+              updatedNextMatch.team2Name = winnerName;
+            }
+            if (updatedNextMatch.team1Id && !updatedNextMatch.team1Id.startsWith('winner-') && !updatedNextMatch.team1Id.startsWith('placeholder-') &&
+                updatedNextMatch.team2Id && !updatedNextMatch.team2Id.startsWith('winner-') && !updatedNextMatch.team2Id.startsWith('placeholder-')) {
+              updatedNextMatch.placeholder = undefined;
+            } else {
+              updatedNextMatch.placeholder = "Esperando equipos";
+            }
+            return updatedNextMatch;
           }
-           if (nextMatch.team1Id && !nextMatch.team1Id.startsWith('winner-') && !nextMatch.team1Id.startsWith('placeholder-') &&
-               nextMatch.team2Id && !nextMatch.team2Id.startsWith('winner-') && !nextMatch.team2Id.startsWith('placeholder-')) {
-            nextMatch.placeholder = undefined;
-          } else {
-            nextMatch.placeholder = "Esperando equipos";
-          }
-        }
+          return m;
+        });
       }
       newState = { ...state, knockoutRounds: newKnockoutRounds };
       break;
@@ -421,7 +462,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
       const { teams } = state;
 
       if (numGroups <= 0 || teams.length === 0 || teams.length < numGroups) {
-        // Toast for error should be handled in the component dispatching
         return state;
       }
 
@@ -465,7 +505,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
     case 'SETUP_LEAGUE': {
       const { name, teamIds, playEachTeamTwice } = action.payload;
       if (teamIds.length < 2) {
-        // Toast for error should be handled in the component dispatching
         return state;
       }
       const leagueMatches = generateRoundRobinMatches(teamIds, state.teams, playEachTeamTwice);
@@ -486,7 +525,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
     }
     case 'GENERATE_LEAGUE_MATCHES': {
       if (!state.league || state.league.teamIds.length < 2) {
-        // Toast for error should be handled in the component dispatching
         return state;
       }
       const leagueMatches = generateRoundRobinMatches(state.league.teamIds, state.teams, !!state.league.playEachTeamTwice);
@@ -608,7 +646,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
     }
     case 'SET_ADMIN_MODE':
       newState = { ...state, isAdminMode: action.payload };
-      console.log("TournamentContext [SET_ADMIN_MODE]: New isAdminMode:", action.payload, "Full new state:", newState);
       break;
     case 'RESET_TOURNAMENT': {
       if (typeof window !== 'undefined') {
@@ -617,11 +654,11 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
       newState = { ...initialState, isAdminMode: false, isInitialized: true };
       const tournamentDocRef = doc(db, TOURNAMENT_DOC_PATH);
       deleteDoc(tournamentDocRef).then(() => {
-        console.log("Tournament data deleted from Firestore");
+        console.log("TournamentContext [Firestore RESET]: Tournament data deleted from Firestore");
       }).catch(error => {
-        console.error("Error deleting tournament data from Firestore:", error);
+        console.error("TournamentContext [Firestore RESET ERROR]: Error deleting tournament data from Firestore:", error);
       });
-      break; // Added missing break
+      break;
     }
     default:
       return state;
@@ -647,6 +684,12 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           const loadedSavedState = JSON.parse(savedStateString) as Partial<TournamentState>;
           console.log("TournamentContext [LOAD]: Parsed from localStorage:", loadedSavedState);
           
+          const parsedKnockoutRounds = (typeof loadedSavedState.knockoutRounds === 'object' && 
+                                      loadedSavedState.knockoutRounds !== null && 
+                                      !Array.isArray(loadedSavedState.knockoutRounds))
+            ? loadedSavedState.knockoutRounds
+            : initialState.knockoutRounds; // Default to empty object if not map-like or missing
+
           statePayload = {
             teams: loadedSavedState.teams || initialState.teams,
             groups: (loadedSavedState.groups || initialState.groups).map(g => ({
@@ -664,7 +707,7 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               })),
               ...g
             })),
-            knockoutRounds: loadedSavedState.knockoutRounds || initialState.knockoutRounds,
+            knockoutRounds: parsedKnockoutRounds as { [roundIndex: string]: KnockoutMatch[] },
             league: loadedSavedState.league ? {
               id: loadedSavedState.league.id || `league-${Date.now()}`,
               name: loadedSavedState.league.name || 'Mi Liga',
@@ -684,8 +727,9 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             isInitialized: false, 
           };
           console.log("TournamentContext [LOAD]: isAdminMode after attempting to load:", statePayload.isAdminMode);
+          console.log("TournamentContext [LOAD]: knockoutRounds after attempting to load:", statePayload.knockoutRounds);
         } catch (error) {
-          console.error("TournamentContext [LOAD]: Error parsing localStorage, using defaults.", error);
+          console.error("TournamentContext [LOAD ERROR]: Error parsing localStorage, using defaults.", error);
           statePayload = { ...initialState, isInitialized: false };
         }
       } else {
@@ -695,14 +739,14 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       dispatch({ type: 'INITIALIZE_STATE', payload: statePayload });
     }
   }, []);
-
+  
   useEffect(() => {
     if (state.isInitialized) {
-      console.log("TournamentContext [SAVE]: Saving to localStorage and Firestore. Current isAdminMode:", state.isAdminMode, "Full state:", state);
+      console.log("TournamentContext [SAVE]: Saving state. Current isAdminMode:", state.isAdminMode, "Full state:", state);
       localStorage.setItem('tournamentState', JSON.stringify(state));
-      saveTournamentStateToFirestore(state); // Save to Firestore as a side effect
+      saveTournamentStateToFirestore(state);
     }
-  }, [state]); // This useEffect runs after every state change and after initialization
+  }, [state]);
 
   if (!state.isInitialized) {
     return <div className="flex justify-center items-center h-screen"><p>Cargando datos del torneo...</p></div>;

@@ -66,8 +66,9 @@ export interface TournamentState {
   teams: Team[];
   groups: Group[];
   league: League | null;
-  knockoutRounds: KnockoutMatch[][];
+  knockoutRounds: { [roundIndex: string]: KnockoutMatch[] }; // Changed from KnockoutMatch[][]
   isInitialized: boolean;
+  isAdminMode: boolean;
 }
 
 export type TournamentAction =
@@ -94,5 +95,5 @@ export type TournamentAction =
   | { type: 'DELETE_LEAGUE_ZONE'; payload: { zoneId: string } }
   | { type: 'ADD_GROUP_ZONE'; payload: { groupId: string; name: string; startPosition: number; endPosition: number; color: string } }
   | { type: 'EDIT_GROUP_ZONE'; payload: { groupId: string; zone: LeagueZoneSetting } }
-  | { type: 'DELETE_GROUP_ZONE'; payload: { groupId: string; zoneId: string } };
-
+  | { type: 'DELETE_GROUP_ZONE'; payload: { groupId: string; zoneId: string } }
+  | { type: 'SET_ADMIN_MODE'; payload: boolean };
