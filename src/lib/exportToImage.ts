@@ -19,6 +19,7 @@ export const exportElementAsImage = async (element: HTMLElement, fileName: strin
       useCORS: true,
       logging: false,
       backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--background').trim() || '#ffffff', // Use theme background
+      ignoreElements: (el) => el.dataset.html2canvasIgnore === 'true',
       ...options,
     });
     const image = canvas.toDataURL('image/png', 1.0);
@@ -44,32 +45,24 @@ export const exportElementAsImage = async (element: HTMLElement, fileName: strin
 };
 
 // Helper to get current theme's actual background color for html2canvas
-// This might need to be more robust if you have complex nested backgrounds
 const getThemeBackgroundColor = () => {
-  if (typeof window === 'undefined') return '#ffffff'; // Default for SSR or non-browser env
+  if (typeof window === 'undefined') return '#ffffff'; 
 
-  // Attempt to get the actual background color of the body or a relevant container
-  // This respects ShadCN CSS variables
   const bodyBgColor = getComputedStyle(document.body).backgroundColor;
   if (bodyBgColor && bodyBgColor !== 'rgba(0, 0, 0, 0)' && bodyBgColor !== 'transparent') {
     return bodyBgColor;
   }
-  // Fallback using the CSS variable directly (might not be fully computed if not on body)
   const themeBg = getComputedStyle(document.documentElement).getPropertyValue('--background').trim();
   if (themeBg) {
-    // HSL values need to be converted to a usable color string like #RRGGBB or rgb()
-    // For simplicity, if it's HSL, we'll use a default. A proper HSL to RGB/HEX is needed for full accuracy.
-    // This is a basic check, a full HSL parser/converter is more complex.
-    if (themeBg.includes(' ') && !themeBg.startsWith('rgb')) { // Likely HSL
-        // Check if dark mode is active to provide a sensible default
+    if (themeBg.includes(' ') && !themeBg.startsWith('rgb')) { 
         if(document.documentElement.classList.contains('dark')) {
-            return '#1a202c'; // A common dark background
+            return '#1a202c'; 
         }
-        return '#ffffff'; // Default light background
+        return '#ffffff'; 
     }
     return themeBg;
   }
-  return '#ffffff'; // Final fallback
+  return '#ffffff'; 
 }
 
 export const exportElementAsImageWithTheme = async (element: HTMLElement, fileName: string, options?: Partial<html2canvas.Options>) => {

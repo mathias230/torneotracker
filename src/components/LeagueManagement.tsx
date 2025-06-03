@@ -410,7 +410,12 @@ export default function LeagueManagement() {
             <div className="p-4 border rounded-md bg-background" ref={leagueTableRef}>
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-lg font-semibold flex items-center gap-2"><ListChecks className="h-5 w-5 text-accent" /> Clasificación de Liga</h3>
-                <Button onClick={handleLeagueTableExport} variant="outline" size="sm">
+                <Button 
+                    onClick={handleLeagueTableExport} 
+                    variant="outline" 
+                    size="sm"
+                    data-html2canvas-ignore="true"
+                >
                   <Camera className="mr-2 h-4 w-4" /> Tomar Foto
                 </Button>
               </div>

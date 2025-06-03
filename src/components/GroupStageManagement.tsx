@@ -300,26 +300,22 @@ export default function GroupStageManagement() {
     }
 
     const tempContainer = document.createElement('div');
-    // Style the container for off-screen rendering but still in DOM for html2canvas
     tempContainer.style.position = 'absolute';
-    tempContainer.style.left = '-9999px'; // Position it off-screen
-    tempContainer.style.width = 'auto'; // Allow it to expand based on content
-    tempContainer.style.padding = '20px'; // Add some padding around the content
+    tempContainer.style.left = '-9999px'; 
+    tempContainer.style.width = 'auto'; 
+    tempContainer.style.padding = '20px'; 
     tempContainer.style.backgroundColor = getComputedStyle(document.documentElement).getPropertyValue('background-color').trim() || '#ffffff';
 
 
     const clonedElementsPromises = selectedGroupsForExport.map(async groupId => {
       const groupElement = groupTableRefs.current[groupId];
       if (groupElement) {
-        // Create a wrapper for each group to control its width and spacing
         const wrapper = document.createElement('div');
-        wrapper.style.marginBottom = '20px'; // Space between groups
-        wrapper.style.border = '1px solid #e0e0e0'; // Optional: visual separation
-        wrapper.style.padding = '10px'; // Optional: padding within each group's "box" in the image
+        wrapper.style.marginBottom = '20px'; 
+        wrapper.style.border = '1px solid #e0e0e0'; 
+        wrapper.style.padding = '10px'; 
         
         const clone = groupElement.cloneNode(true) as HTMLElement;
-        // Set clone width explicitly to avoid issues with html2canvas rendering
-        // Use scrollWidth to capture full width if it's wider than viewport
         clone.style.width = `${groupElement.scrollWidth}px`; 
         wrapper.appendChild(clone);
         return wrapper;
@@ -339,7 +335,7 @@ export default function GroupStageManagement() {
 
     try {
       await exportElementAsImageWithTheme(tempContainer, `multi_grupos_export`);
-      setSelectedGroupsForExport([]); // Clear selection after export
+      setSelectedGroupsForExport([]); 
     } catch (error) {
       console.error("Error al exportar grupos seleccionados:", error);
       toast({ title: "Error de Exportación", description: "Ocurrió un problema al generar la imagen combinada.", variant: "destructive" });
@@ -559,7 +555,12 @@ export default function GroupStageManagement() {
             <div className="p-4 border rounded-md bg-background" ref={el => groupTableRefs.current[group.id] = el}>
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-lg font-semibold flex items-center gap-2"><ListChecks className="h-5 w-5 text-accent" /> Clasificación del Grupo</h3>
-                 <Button onClick={() => handleGroupTableExport(group)} variant="outline" size="sm">
+                 <Button 
+                    onClick={() => handleGroupTableExport(group)} 
+                    variant="outline" 
+                    size="sm"
+                    data-html2canvas-ignore="true"
+                  >
                   <Camera className="mr-2 h-4 w-4" /> Tomar Foto (Individual)
                 </Button>
               </div>
