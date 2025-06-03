@@ -25,13 +25,11 @@ import { toast } from "@/hooks/use-toast";
 
 export default function AppHeader() {
   const dispatch = useTournamentDispatch();
-  const { isAdminMode } = useTournamentState(); // Get isAdminMode from context
+  const { isAdminMode } = useTournamentState(); 
   const [mounted, setMounted] = useState(false);
   const { theme, setTheme, resolvedTheme } = useTheme();
 
-  // IMPORTANT: For production, this code should be stored securely, e.g., an environment variable
-  // and ideally validated on a backend if possible for true security.
-  const ADMIN_CODE = "SUPER_SECRET";
+  const ADMIN_CODE = "may45456thttfdeddr"; // Updated Admin Code
   const [adminCodeInput, setAdminCodeInput] = useState('');
   const [isAdminCodeDialogOpen, setIsAdminCodeDialogOpen] = useState(false);
 
@@ -141,7 +139,6 @@ export default function AppHeader() {
             </Dialog>
           )}
 
-          {/* Conditional rendering for the Reset Tournament button */}
           {isAdminMode && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
