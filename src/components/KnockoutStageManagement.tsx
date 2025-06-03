@@ -1,18 +1,19 @@
 
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTournamentState, useTournamentDispatch, useIsClient } from '@/components/TournamentContext';
 import type { KnockoutMatch } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { GitFork, Save, Trophy } from 'lucide-react';
+import { GitFork, Save, Trophy, Camera } from 'lucide-react';
 import { toast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { exportElementAsImageWithTheme } from '@/lib/exportToImage';
 
 
 interface KnockoutScoreInput {
@@ -34,6 +35,7 @@ export default function KnockoutStageManagement() {
   const [selectedTeamsForBracket, setSelectedTeamsForBracket] = useState<string[]>([]);
   const [matchScores, setMatchScores] = useState<KnockoutScoreInput>({});
   const isClient = useIsClient();
+  const bracketRef = useRef<HTMLDivElement>(null);
 
   const handleCreateBracket = () => {
     const numTeams = parseInt(startingRoundValue, 10);
@@ -89,7 +91,7 @@ export default function KnockoutStageManagement() {
     toast({ title: "Éxito", description: "Resultado del partido de eliminación actualizado." });
   };
   
-  const getTeamName = (teamId: string | undefined, defaultName: string = 'A determinar'): string => {
+  const getTeamName = (teamId: string | undefined | null, defaultName: string = 'A determinar'): string => {
     if (!teamId) return defaultName;
     if (teamId.startsWith('winner-') || teamId.startsWith('placeholder-')) return defaultName;
     return teams.find(t => t.id === teamId)?.name || defaultName;
@@ -103,34 +105,36 @@ export default function KnockoutStageManagement() {
 
   const currentRequiredTeams = parseInt(startingRoundValue, 10);
 
-  // Filter out the "champion placeholder" round from display if it's just a single item representing the winner.
   const playableRounds = knockoutRounds.filter(round => {
-    if (round.length === 1) {
+    if (round.length === 1 && round[0]) {
       const match = round[0];
-      // Check if it's a placeholder for the champion (e.g., team1Id is a winner, team2Id is null or also a winner placeholder)
-      // and not a final match where both teams are concrete or yet to be determined from previous actual matches.
-      const isTeam1WinnerPlaceholder = match.team1Id && (match.team1Id.startsWith('winner-'));
-      const isTeam2WinnerPlaceholderOrNull = !match.team2Id || (match.team2Id && (match.team2Id.startsWith('winner-')));
-      
-      // If the round contains only one match and that match appears to be a final placeholder for the champion
-      // (e.g., team1 is 'winner-of-final' and team2 is not set or also a winner placeholder from another branch that won't happen),
-      // then we might not want to display it as a separate "round" column.
-      // This is a heuristic; a more robust way might involve checking if it's the *absolute last* round AND its teams are placeholders.
-      if (isTeam1WinnerPlaceholder && isTeam2WinnerPlaceholderOrNull && round === knockoutRounds[knockoutRounds.length -1] && knockoutRounds.length > 1) {
-          // This logic needs refinement to correctly identify a "champion display slot" vs. a "playable final".
-          // For now, let's assume if it's the last round, length 1, and involves placeholders, it might be the champion slot.
-          // The goal is to not show a "Round X" for the champion.
-          // A better approach is to check if this is the round AFTER the actual final.
-          // For now, let's just filter if it has one match and team2Id is null or a placeholder AND it's the last round.
-          if(knockoutRounds.length > 1 && round === knockoutRounds[knockoutRounds.length -1] && match.team1Id && !match.team2Id){
-            return false; 
-          }
+      // Check if it's the champion placeholder slot
+      // This slot is typically the very last round, has one match,
+      // team1Id starts with 'winner-' (or is a real team if bracket is small), and team2Id is null.
+      if (knockoutRounds.length > 0 && round === knockoutRounds[knockoutRounds.length - 1] && !match.team2Id) {
+         // If it's also the *only* round (e.g. a 1-team tournament resulting in just a champion slot),
+         // it might be considered playable if we want to display the champion.
+         // However, for rendering distinct rounds, if this is the *final* slot after an actual final match, filter it.
+         if (knockoutRounds.length > 1) return false; // Filter out if it's the champion slot after at least one playable round
       }
     }
     return round.length > 0;
   });
   
   const numberOfPlayableRounds = playableRounds.length;
+
+  const handleBracketExport = () => {
+    if (bracketRef.current) {
+      const roundName = roundOptions.find(opt => opt.value === startingRoundValue)?.label || "cuadro";
+      exportElementAsImageWithTheme(bracketRef.current, `cuadro_eliminatorias_${roundName.toLowerCase().replace(/\s+/g, '_')}`);
+    } else {
+      toast({
+        title: "Error al Exportar",
+        description: "No se pudo encontrar el cuadro para exportar.",
+        variant: "destructive",
+      });
+    }
+  };
 
 
   if (!isClient) {
@@ -201,50 +205,64 @@ export default function KnockoutStageManagement() {
 
       {playableRounds.length > 0 && (
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row justify-between items-center">
             <CardTitle className="font-headline text-xl sm:text-2xl text-primary">Cuadro de Eliminatorias</CardTitle>
+            <Button 
+                onClick={handleBracketExport} 
+                variant="outline" 
+                size="sm"
+                data-html2canvas-ignore="true"
+              >
+              <Camera className="mr-2 h-4 w-4" /> Tomar Foto
+            </Button>
           </CardHeader>
           <CardContent className="overflow-x-auto pb-6 pt-2">
-            <div className="flex items-start space-x-4 sm:space-x-8 min-w-max">
+            <div className="flex items-start space-x-4 sm:space-x-8 min-w-max" ref={bracketRef}>
               {playableRounds.map((round, roundIndex) => {
                 
-                const isLastPlayableRound = roundIndex === numberOfPlayableRounds - 1;
-                const isSingleMatchFinal = isLastPlayableRound && round.length === 1;
-                
-                let roundTitle = `Ronda ${numberOfPlayableRounds - roundIndex}`; // Default title
+                let roundTitleText = `Ronda ${roundIndex + 1}`; // Fallback
 
-                if (isSingleMatchFinal) {
-                    const finalMatch = round[0];
-                    const championId = finalMatch.played && finalMatch.team1Score !== null && finalMatch.team2Score !== null
-                                      ? (finalMatch.team1Score > finalMatch.team2Score ? finalMatch.team1Id : finalMatch.team2Id)
-                                      : null;
+                if (numberOfPlayableRounds === 1) { // The only playable round IS the Final
+                    const match = round[0];
+                    const championId = (match.played && match.team1Score !== null && match.team2Score !== null)
+                        ? (match.team1Score > match.team2Score ? match.team1Id : match.team2Id)
+                        : null;
                     if (championId) {
-                        roundTitle = `Campeón: ${getTeamName(championId, '')}`;
+                        roundTitleText = `Campeón: ${getTeamName(championId, '')}`;
                     } else {
-                        roundTitle = "Final";
+                        roundTitleText = "Final";
                     }
-                } else if (numberOfPlayableRounds > 1 && roundIndex === numberOfPlayableRounds - 2) {
-                    roundTitle = "Semifinales";
-                } else if (numberOfPlayableRounds > 2 && roundIndex === numberOfPlayableRounds - 3) {
-                    roundTitle = "Cuartos de Final";
-                } else if (numberOfPlayableRounds > 3 && roundIndex === numberOfPlayableRounds - 4) {
-                    roundTitle = "Octavos de Final";
-                } else if (numberOfPlayableRounds > 4 && roundIndex === numberOfPlayableRounds - 5) {
-                    roundTitle = "Dieciseisavos de Final";
+                } else { // Multiple playable rounds
+                    if (roundIndex === numberOfPlayableRounds - 1) roundTitleText = "Final";
+                    else if (roundIndex === numberOfPlayableRounds - 2) roundTitleText = "Semifinales";
+                    else if (roundIndex === numberOfPlayableRounds - 3) roundTitleText = "Cuartos de Final";
+                    else if (roundIndex === numberOfPlayableRounds - 4) roundTitleText = "Octavos de Final";
+                    else if (roundIndex === numberOfPlayableRounds - 5) roundTitleText = "Dieciseisavos de Final";
+
+                    // If this IS the "Final" round (last of multiple playable rounds) and a champion is decided
+                    if (roundTitleText === "Final" && round.length === 1) {
+                        const match = round[0];
+                        const championId = (match.played && match.team1Score !== null && match.team2Score !== null)
+                            ? (match.team1Score > match.team2Score ? match.team1Id : match.team2Id)
+                            : null;
+                        if (championId) {
+                            roundTitleText = `Campeón: ${getTeamName(championId, '')}`;
+                        }
+                    }
                 }
                 
+                const isActualFinalMatchAndWon = roundTitleText.startsWith("Campeón:") && round.length === 1;
+
                 return (
                   <div key={`round-${roundIndex}`} className="flex flex-col space-y-12 min-w-[250px] sm:min-w-[280px] pt-10 relative">
                     <h3 className="text-md sm:text-lg font-semibold text-center text-accent absolute -top-0 left-0 right-0 whitespace-nowrap">
-                       {roundTitle}
+                       {roundTitleText}
                     </h3>
                     
                     <div className="space-y-16">
                       {round.map((match, matchIndex) => {
                         const winnerId = match.played && match.team1Score !== null && match.team2Score !== null ? (match.team1Score > match.team2Score ? match.team1Id : match.team2Score > match.team1Score ? match.team2Id : null) : null;
-                        
-                        const isActualFinalMatchAndWon = isSingleMatchFinal && match.played && winnerId;
-                      
+                                              
                         const team1IsPlaceholder = !match.team1Id || match.team1Id.startsWith('winner-') || match.team1Id.startsWith('placeholder-');
                         const team2IsPlaceholder = !match.team2Id || match.team2Id.startsWith('winner-') || match.team2Id.startsWith('placeholder-');
                         const canEditScores = (!match.played || matchScores[match.id] !== undefined) && !team1IsPlaceholder && !team2IsPlaceholder;
@@ -252,7 +270,7 @@ export default function KnockoutStageManagement() {
                         return (
                           <div key={match.id} className="bg-card rounded-lg shadow-md relative isolate">
                             
-                            {isActualFinalMatchAndWon ? (
+                            {isActualFinalMatchAndWon && winnerId ? ( // Check winnerId too for safety
                               <div className="text-center py-6 sm:py-8 px-4">
                                 <Trophy className="h-12 w-12 sm:h-16 sm:w-16 text-amber-400 mx-auto mb-3 sm:mb-4" />
                                 <p className="text-xl sm:text-2xl font-bold text-primary truncate px-2">{getTeamName(winnerId)}</p>
@@ -358,3 +376,4 @@ export default function KnockoutStageManagement() {
     </div>
   );
 }
+
