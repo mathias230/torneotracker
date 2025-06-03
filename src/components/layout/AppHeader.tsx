@@ -29,9 +29,11 @@ export default function AppHeader() {
   const [mounted, setMounted] = useState(false);
   const { theme, setTheme, resolvedTheme } = useTheme();
 
-  const ADMIN_CODE = "may45456thttfdeddr"; // Updated Admin Code
+  const ADMIN_CODE = "may45456thttfdeddr"; 
   const [adminCodeInput, setAdminCodeInput] = useState('');
   const [isAdminCodeDialogOpen, setIsAdminCodeDialogOpen] = useState(false);
+
+  console.log("AppHeader: Render, isAdminMode from context:", isAdminMode);
 
 
   useEffect(() => {
@@ -164,3 +166,6 @@ export default function AppHeader() {
     </header>
   );
 }
+
+
+    
