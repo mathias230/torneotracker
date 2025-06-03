@@ -49,7 +49,7 @@ interface ZoneFormState {
 }
 
 export default function LeagueManagement() {
-  const { teams, league, getLeagueStandings } = useTournamentState();
+  const { teams, league, getLeagueStandings, isAdminMode } = useTournamentState();
   const dispatch = useTournamentDispatch();
   const isClient = useIsClient();
 
@@ -65,15 +65,17 @@ export default function LeagueManagement() {
 
 
   useEffect(() => {
-    if (!league && teams.length > 0) {
+    if (!league && teams.length > 0 && isAdminMode) { // Only pre-select if admin and no league exists
       setSelectedTeamIdsForLeague(teams.map(t => t.id));
     }
     if (league) {
       setLeagueName(league.name);
-      setSelectedTeamIdsForLeague(league.teamIds);
-      setPlayEachTeamTwice(league.playEachTeamTwice || false);
+      if (isAdminMode) { // Only allow changing selection if admin
+         setSelectedTeamIdsForLeague(league.teamIds);
+         setPlayEachTeamTwice(league.playEachTeamTwice || false);
+      }
     }
-  }, [teams, league]);
+  }, [teams, league, isAdminMode]);
 
 
   const handleSetupLeague = () => {
@@ -257,7 +259,23 @@ export default function LeagueManagement() {
     </Card>;
   }
 
-  if (!league) {
+  if (!league && !isAdminMode) {
+    return (
+      <Card className="w-full max-w-lg mx-auto">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 font-headline text-xl sm:text-2xl">
+            <ClipboardList className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Liga
+          </CardTitle>
+          <CardDescription>Aún no se ha configurado una liga. El administrador debe configurarla primero.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground text-center">Visita esta sección más tarde para ver el estado de la liga.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+  
+  if (!league && isAdminMode) {
     return (
       <Card className="w-full max-w-lg mx-auto">
         <CardHeader>
@@ -324,290 +342,309 @@ export default function LeagueManagement() {
       </Card>
     );
   }
-
-  return (
-    <div className="space-y-8">
-      <Card className="w-full max-w-4xl mx-auto shadow-lg">
-        <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-            <div>
-              <CardTitle className="font-headline text-xl sm:text-2xl text-primary flex items-center gap-2">
-                <ClipboardList className="h-6 w-6" /> {league.name}
-              </CardTitle>
-              <CardDescription>Gestiona los partidos, la clasificación y las zonas de la liga.
-                {league.playEachTeamTwice && " (Los equipos juegan entre sí dos veces)"}
-              </CardDescription>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-              <Button onClick={handleGenerateLeagueMatches} variant="outline" className="w-full sm:w-auto">
-                <Repeat className="mr-2 h-4 w-4" /> Re-generar Calendario
-              </Button>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive" className="w-full sm:w-auto">
-                    <Trash2 className="mr-2 h-4 w-4" /> Borrar Datos de Liga
+  
+  // If league exists, show the management/view page
+  if (league) {
+    return (
+      <div className="space-y-8">
+        <Card className="w-full max-w-4xl mx-auto shadow-lg">
+          <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <div>
+                <CardTitle className="font-headline text-xl sm:text-2xl text-primary flex items-center gap-2">
+                  <ClipboardList className="h-6 w-6" /> {league.name}
+                </CardTitle>
+                <CardDescription>
+                  {isAdminMode ? "Gestiona los partidos, la clasificación y las zonas de la liga." : "Estado actual de la liga."}
+                  {league.playEachTeamTwice && " (Los equipos juegan entre sí dos veces)"}
+                </CardDescription>
+              </div>
+              {isAdminMode && (
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                  <Button onClick={handleGenerateLeagueMatches} variant="outline" className="w-full sm:w-auto">
+                    <Repeat className="mr-2 h-4 w-4" /> Re-generar Calendario
                   </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Confirmar Borrado de Liga</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      ¿Estás seguro de que quieres borrar todos los datos de "{league.name}"? Esto eliminará todos los partidos, la clasificación y las zonas. Los datos de los equipos permanecerán.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleClearLeague}>Borrar Liga</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
-        </CardHeader>
-        <CardContent className="space-y-6">
-            <div className="p-4 border rounded-md bg-background">
-              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><ListChecks className="h-5 w-5 text-accent" /> Partidos de Liga</h3>
-              {league.matches.length > 0 ? (
-                <ScrollArea className="h-[300px] pr-3">
-                  <ul className="space-y-2">
-                    {league.matches.map(match => (
-                      <li key={match.id} className="p-2.5 border rounded-md bg-secondary/30 text-sm">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-1.5">
-                          <span className="break-all"><strong>{getTeamName(match.team1Id)}</strong> vs <strong>{getTeamName(match.team2Id)}</strong></span>
-                          {match.played && <span className="text-xs px-1.5 py-0.5 bg-green-200 text-green-800 rounded-full mt-1 sm:mt-0">Jugado</span>}
-                        </div>
-                        <div className="flex flex-wrap gap-2 items-center">
-                          <Input
-                            type="number"
-                            min="0"
-                            placeholder="Res. 1"
-                            aria-label={`Resultado para ${getTeamName(match.team1Id)}`}
-                            value={matchScores[match.id]?.team1Score ?? match.team1Score ?? ''}
-                            onChange={(e) => handleScoreChange(match.id, 'team1', e.target.value)}
-                            className="w-20 h-8 text-xs"
-                            disabled={match.played && (matchScores[match.id] === undefined)}
-                          />
-                          <span>-</span>
-                          <Input
-                            type="number"
-                            min="0"
-                            placeholder="Res. 2"
-                            aria-label={`Resultado para ${getTeamName(match.team2Id)}`}
-                            value={matchScores[match.id]?.team2Score ?? match.team2Score ?? ''}
-                            onChange={(e) => handleScoreChange(match.id, 'team2', e.target.value)}
-                            className="w-20 h-8 text-xs"
-                            disabled={match.played && (matchScores[match.id] === undefined)}
-                          />
-                          <Button onClick={() => handleUpdateMatchResult(match.id)} size="sm" variant="outline" className="h-8 text-xs" aria-label="Guardar resultado del partido">
-                            <Save className="mr-1 h-3 w-3" /> Guardar
-                          </Button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </ScrollArea>
-              ) : <p className="text-xs text-muted-foreground">No hay partidos generados. Haz clic en "Re-generar Calendario" si tienes equipos en la liga.</p>}
-            </div>
-
-            <div className="p-4 border rounded-md bg-background" ref={leagueTableRef}>
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="text-lg font-semibold flex items-center gap-2"><ListChecks className="h-5 w-5 text-accent" /> Clasificación de Liga</h3>
-                <Button 
-                    onClick={handleLeagueTableExport} 
-                    variant="outline" 
-                    size="sm"
-                    data-html2canvas-ignore="true"
-                >
-                  <Camera className="mr-2 h-4 w-4" /> Tomar Foto
-                </Button>
-              </div>
-              {leagueStandings.length > 0 ? (
-                <>
-                  <ScrollArea className="max-w-full">
-                    <Table className="min-w-[600px] sm:min-w-full">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="font-bold w-[60px] text-center">#</TableHead>
-                          <TableHead className="font-bold">Equipo</TableHead>
-                          <TableHead className="text-center">PJ</TableHead>
-                          <TableHead className="text-center">PG</TableHead>
-                          <TableHead className="text-center">PE</TableHead>
-                          <TableHead className="text-center">PP</TableHead>
-                          <TableHead className="text-center">GF</TableHead>
-                          <TableHead className="text-center">GC</TableHead>
-                          <TableHead className="text-center">DG</TableHead>
-                          <TableHead className="text-center font-bold">Pts</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {leagueStandings.map((stat, index) => {
-                          const position = index + 1;
-                          const zone = getZoneForPosition(position);
-                          return (
-                            <TableRow key={stat.teamId}>
-                              <TableCell className="text-center font-medium relative pl-6">
-                                {zone && (
-                                  <span
-                                    className="absolute left-0 top-0 bottom-0 w-1.5"
-                                    style={{ backgroundColor: zone.color }}
-                                    aria-hidden="true"
-                                  ></span>
-                                )}
-                                {position}.
-                              </TableCell>
-                              <TableCell className="truncate max-w-[100px] sm:max-w-xs">{stat.teamName}</TableCell>
-                              <TableCell className="text-center">{stat.played}</TableCell>
-                              <TableCell className="text-center">{stat.won}</TableCell>
-                              <TableCell className="text-center">{stat.drawn}</TableCell>
-                              <TableCell className="text-center">{stat.lost}</TableCell>
-                              <TableCell className="text-center">{stat.gf}</TableCell>
-                              <TableCell className="text-center">{stat.ga}</TableCell>
-                              <TableCell className="text-center">{stat.gd}</TableCell>
-                              <TableCell className="text-center font-bold">{stat.points}</TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </ScrollArea>
-                  {league.zoneSettings && league.zoneSettings.length > 0 && (
-                    <div className="mt-4 p-3 border rounded-md bg-secondary/30">
-                      <h4 className="text-md font-semibold mb-2 text-secondary-foreground">Clasificaciones:</h4>
-                      <ul className="space-y-1">
-                        {league.zoneSettings.map(zone => (
-                          <li key={`legend-${zone.id}`} className="flex items-center gap-2 text-sm text-secondary-foreground">
-                            <span 
-                              className="h-3 w-3 rounded-sm inline-block border border-border" 
-                              style={{ backgroundColor: zone.color }}
-                              aria-hidden="true"
-                            ></span>
-                            <span>{zone.name} (Pos. {zone.startPosition}{zone.startPosition !== zone.endPosition ? `-${zone.endPosition}` : ''})</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </>
-              ) : <p className="text-xs text-muted-foreground">No hay clasificación para mostrar. Añade equipos, genera un calendario y registra resultados de partidos.</p>}
-            </div>
-
-            <div className="p-4 border rounded-md bg-background">
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="text-lg font-semibold flex items-center gap-2"><Palette className="h-5 w-5 text-accent" /> Zonas de Clasificación</h3>
-                <Button size="sm" onClick={openZoneModalForNew}><PlusCircle className="mr-2 h-4 w-4"/>Añadir Zona</Button>
-              </div>
-              {league.zoneSettings && league.zoneSettings.length > 0 ? (
-                <div className="space-y-2">
-                  {league.zoneSettings.map(zone => (
-                    <div key={zone.id} className="flex items-center justify-between p-2 bg-secondary/30 rounded-md">
-                      <div className="flex items-center gap-2">
-                        <span className="h-4 w-4 rounded-sm border border-border" style={{ backgroundColor: zone.color }}></span>
-                        <span>{zone.name} (Pos. {zone.startPosition}{zone.startPosition !== zone.endPosition ? `-${zone.endPosition}` : ''})</span>
-                      </div>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openZoneModalForEdit(zone)}>
-                          <Edit3 className="h-4 w-4" />
-                        </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive">
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Confirmar Eliminación</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                ¿Estás seguro de que quieres eliminar la zona "{zone.name}"?
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDeleteZone(zone.id)}>Eliminar</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </div>
-                  ))}
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" className="w-full sm:w-auto">
+                        <Trash2 className="mr-2 h-4 w-4" /> Borrar Datos de Liga
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Confirmar Borrado de Liga</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          ¿Estás seguro de que quieres borrar todos los datos de "{league.name}"? Esto eliminará todos los partidos, la clasificación y las zonas. Los datos de los equipos permanecerán.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleClearLeague}>Borrar Liga</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">No se han configurado zonas de clasificación. Puedes añadir zonas para marcar visualmente posiciones en la tabla (ej. clasificación a copas, descenso).</p>
               )}
-            </div>
-          </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent className="space-y-6">
+              <div className="p-4 border rounded-md bg-background">
+                <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><ListChecks className="h-5 w-5 text-accent" /> Partidos de Liga</h3>
+                {league.matches.length > 0 ? (
+                  <ScrollArea className="h-[300px] pr-3">
+                    <ul className="space-y-2">
+                      {league.matches.map(match => (
+                        <li key={match.id} className="p-2.5 border rounded-md bg-secondary/30 text-sm">
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-1.5">
+                            <span className="break-all"><strong>{getTeamName(match.team1Id)}</strong> vs <strong>{getTeamName(match.team2Id)}</strong></span>
+                            {match.played && <span className="text-xs px-1.5 py-0.5 bg-green-200 text-green-800 rounded-full mt-1 sm:mt-0">Jugado</span>}
+                          </div>
+                          {isAdminMode ? (
+                            <div className="flex flex-wrap gap-2 items-center">
+                              <Input
+                                type="number"
+                                min="0"
+                                placeholder="Res. 1"
+                                aria-label={`Resultado para ${getTeamName(match.team1Id)}`}
+                                value={matchScores[match.id]?.team1Score ?? match.team1Score ?? ''}
+                                onChange={(e) => handleScoreChange(match.id, 'team1', e.target.value)}
+                                className="w-20 h-8 text-xs"
+                                disabled={match.played && (matchScores[match.id] === undefined)}
+                              />
+                              <span>-</span>
+                              <Input
+                                type="number"
+                                min="0"
+                                placeholder="Res. 2"
+                                aria-label={`Resultado para ${getTeamName(match.team2Id)}`}
+                                value={matchScores[match.id]?.team2Score ?? match.team2Score ?? ''}
+                                onChange={(e) => handleScoreChange(match.id, 'team2', e.target.value)}
+                                className="w-20 h-8 text-xs"
+                                disabled={match.played && (matchScores[match.id] === undefined)}
+                              />
+                              <Button onClick={() => handleUpdateMatchResult(match.id)} size="sm" variant="outline" className="h-8 text-xs" aria-label="Guardar resultado del partido">
+                                <Save className="mr-1 h-3 w-3" /> Guardar
+                              </Button>
+                            </div>
+                          ) : (
+                            match.played ? (
+                              <p className="text-sm">Resultado: {match.team1Score} - {match.team2Score}</p>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">Pendiente</p>
+                            )
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </ScrollArea>
+                ) : <p className="text-xs text-muted-foreground">No hay partidos generados. {isAdminMode && 'Haz clic en "Re-generar Calendario" si tienes equipos en la liga.'}</p>}
+              </div>
 
-      <Dialog open={isZoneModalOpen} onOpenChange={setIsZoneModalOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>{editingZoneId ? 'Editar Zona de Clasificación' : 'Añadir Nueva Zona de Clasificación'}</DialogTitle>
-            <DialogDescription>
-              Define un nombre, el rango de posiciones (inicio y fin), y un color para esta zona.
-              Para marcar una sola posición, puedes dejar "Pos. Final" vacío o ingresar el mismo número que en "Pos. Inicial".
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="zoneName" className="text-right">
-                Nombre
-              </Label>
-              <Input
-                id="zoneName"
-                value={currentZone.name}
-                onChange={(e) => setCurrentZone({ ...currentZone, name: e.target.value })}
-                className="col-span-3"
-                placeholder="Ej: Champions League"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="zoneStartPosition" className="text-right">
-                Pos. Inicial
-              </Label>
-              <Input
-                id="zoneStartPosition"
-                type="number"
-                min="1"
-                value={currentZone.startPosition}
-                onChange={(e) => setCurrentZone({ ...currentZone, startPosition: e.target.value })}
-                className="col-span-3"
-                placeholder="Ej: 1"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="zoneEndPosition" className="text-right">
-                Pos. Final
-              </Label>
-              <Input
-                id="zoneEndPosition"
-                type="number"
-                min="1"
-                value={currentZone.endPosition}
-                onChange={(e) => setCurrentZone({ ...currentZone, endPosition: e.target.value })}
-                className="col-span-3"
-                placeholder="Ej: 4 (o dejar vacío si es igual a Pos. Inicial)"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="zoneColor" className="text-right">
-                Color
-              </Label>
-              <Input
-                id="zoneColor"
-                type="color"
-                value={currentZone.color}
-                onChange={(e) => setCurrentZone({ ...currentZone, color: e.target.value })}
-                className="col-span-3 h-10 p-1"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <DialogClose asChild>
-                <Button type="button" variant="outline">Cancelar</Button>
-            </DialogClose>
-            <Button type="button" onClick={handleSaveZone}>Guardar Zona</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
+              <div className="p-4 border rounded-md bg-background" ref={leagueTableRef}>
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-lg font-semibold flex items-center gap-2"><ListChecks className="h-5 w-5 text-accent" /> Clasificación de Liga</h3>
+                  <Button 
+                      onClick={handleLeagueTableExport} 
+                      variant="outline" 
+                      size="sm"
+                      data-html2canvas-ignore="true"
+                  >
+                    <Camera className="mr-2 h-4 w-4" /> Tomar Foto
+                  </Button>
+                </div>
+                {leagueStandings.length > 0 ? (
+                  <>
+                    <ScrollArea className="max-w-full">
+                      <Table className="min-w-[600px] sm:min-w-full">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="font-bold w-[60px] text-center">#</TableHead>
+                            <TableHead className="font-bold">Equipo</TableHead>
+                            <TableHead className="text-center">PJ</TableHead>
+                            <TableHead className="text-center">PG</TableHead>
+                            <TableHead className="text-center">PE</TableHead>
+                            <TableHead className="text-center">PP</TableHead>
+                            <TableHead className="text-center">GF</TableHead>
+                            <TableHead className="text-center">GC</TableHead>
+                            <TableHead className="text-center">DG</TableHead>
+                            <TableHead className="text-center font-bold">Pts</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {leagueStandings.map((stat, index) => {
+                            const position = index + 1;
+                            const zone = getZoneForPosition(position);
+                            return (
+                              <TableRow key={stat.teamId}>
+                                <TableCell className="text-center font-medium relative pl-6">
+                                  {zone && (
+                                    <span
+                                      className="absolute left-0 top-0 bottom-0 w-1.5"
+                                      style={{ backgroundColor: zone.color }}
+                                      aria-hidden="true"
+                                    ></span>
+                                  )}
+                                  {position}.
+                                </TableCell>
+                                <TableCell className="truncate max-w-[100px] sm:max-w-xs">{stat.teamName}</TableCell>
+                                <TableCell className="text-center">{stat.played}</TableCell>
+                                <TableCell className="text-center">{stat.won}</TableCell>
+                                <TableCell className="text-center">{stat.drawn}</TableCell>
+                                <TableCell className="text-center">{stat.lost}</TableCell>
+                                <TableCell className="text-center">{stat.gf}</TableCell>
+                                <TableCell className="text-center">{stat.ga}</TableCell>
+                                <TableCell className="text-center">{stat.gd}</TableCell>
+                                <TableCell className="text-center font-bold">{stat.points}</TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                    {league.zoneSettings && league.zoneSettings.length > 0 && (
+                      <div className="mt-4 p-3 border rounded-md bg-secondary/30">
+                        <h4 className="text-md font-semibold mb-2 text-secondary-foreground">Clasificaciones:</h4>
+                        <ul className="space-y-1">
+                          {league.zoneSettings.map(zone => (
+                            <li key={`legend-${zone.id}`} className="flex items-center gap-2 text-sm text-secondary-foreground">
+                              <span 
+                                className="h-3 w-3 rounded-sm inline-block border border-border" 
+                                style={{ backgroundColor: zone.color }}
+                                aria-hidden="true"
+                              ></span>
+                              <span>{zone.name} (Pos. {zone.startPosition}{zone.startPosition !== zone.endPosition ? `-${zone.endPosition}` : ''})</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                ) : <p className="text-xs text-muted-foreground">No hay clasificación para mostrar. {isAdminMode && "Añade equipos, genera un calendario y registra resultados de partidos."}</p>}
+              </div>
+
+              {isAdminMode && (
+                <div className="p-4 border rounded-md bg-background">
+                  <div className="flex justify-between items-center mb-3">
+                    <h3 className="text-lg font-semibold flex items-center gap-2"><Palette className="h-5 w-5 text-accent" /> Zonas de Clasificación</h3>
+                    <Button size="sm" onClick={openZoneModalForNew}><PlusCircle className="mr-2 h-4 w-4"/>Añadir Zona</Button>
+                  </div>
+                  {league.zoneSettings && league.zoneSettings.length > 0 ? (
+                    <div className="space-y-2">
+                      {league.zoneSettings.map(zone => (
+                        <div key={zone.id} className="flex items-center justify-between p-2 bg-secondary/30 rounded-md">
+                          <div className="flex items-center gap-2">
+                            <span className="h-4 w-4 rounded-sm border border-border" style={{ backgroundColor: zone.color }}></span>
+                            <span>{zone.name} (Pos. {zone.startPosition}{zone.startPosition !== zone.endPosition ? `-${zone.endPosition}` : ''})</span>
+                          </div>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openZoneModalForEdit(zone)}>
+                              <Edit3 className="h-4 w-4" />
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive">
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Confirmar Eliminación</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    ¿Estás seguro de que quieres eliminar la zona "{zone.name}"?
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleDeleteZone(zone.id)}>Eliminar</AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No se han configurado zonas de clasificación. {isAdminMode && "Puedes añadir zonas para marcar visualmente posiciones en la tabla (ej. clasificación a copas, descenso)."}</p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+        </Card>
+
+        {isAdminMode && isZoneModalOpen && (
+          <Dialog open={isZoneModalOpen} onOpenChange={setIsZoneModalOpen}>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>{editingZoneId ? 'Editar Zona de Clasificación' : 'Añadir Nueva Zona de Clasificación'}</DialogTitle>
+                <DialogDescription>
+                  Define un nombre, el rango de posiciones (inicio y fin), y un color para esta zona.
+                  Para marcar una sola posición, puedes dejar "Pos. Final" vacío o ingresar el mismo número que en "Pos. Inicial".
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="zoneName" className="text-right">
+                    Nombre
+                  </Label>
+                  <Input
+                    id="zoneName"
+                    value={currentZone.name}
+                    onChange={(e) => setCurrentZone({ ...currentZone, name: e.target.value })}
+                    className="col-span-3"
+                    placeholder="Ej: Champions League"
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="zoneStartPosition" className="text-right">
+                    Pos. Inicial
+                  </Label>
+                  <Input
+                    id="zoneStartPosition"
+                    type="number"
+                    min="1"
+                    value={currentZone.startPosition}
+                    onChange={(e) => setCurrentZone({ ...currentZone, startPosition: e.target.value })}
+                    className="col-span-3"
+                    placeholder="Ej: 1"
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="zoneEndPosition" className="text-right">
+                    Pos. Final
+                  </Label>
+                  <Input
+                    id="zoneEndPosition"
+                    type="number"
+                    min="1"
+                    value={currentZone.endPosition}
+                    onChange={(e) => setCurrentZone({ ...currentZone, endPosition: e.target.value })}
+                    className="col-span-3"
+                    placeholder="Ej: 4 (o dejar vacío si es igual a Pos. Inicial)"
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="zoneColor" className="text-right">
+                    Color
+                  </Label>
+                  <Input
+                    id="zoneColor"
+                    type="color"
+                    value={currentZone.color}
+                    onChange={(e) => setCurrentZone({ ...currentZone, color: e.target.value })}
+                    className="col-span-3 h-10 p-1"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <DialogClose asChild>
+                    <Button type="button" variant="outline">Cancelar</Button>
+                </DialogClose>
+                <Button type="button" onClick={handleSaveZone}>Guardar Zona</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+      </div>
+    );
+  }
+  // Fallback for non-admin if league is null, should be caught by the early return
+  return <p className="text-muted-foreground text-center mt-6">Configuración de liga no disponible.</p>;
 }
-    

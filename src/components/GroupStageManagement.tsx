@@ -50,7 +50,7 @@ interface ZoneFormState {
 }
 
 export default function GroupStageManagement() {
-  const { teams, groups } = useTournamentState();
+  const { teams, groups, isAdminMode } = useTournamentState();
   const dispatch = useTournamentDispatch();
   const [groupName, setGroupName] = useState('');
   const [numRandomGroups, setNumRandomGroups] = useState('2');
@@ -167,7 +167,7 @@ export default function GroupStageManagement() {
           team2Stats.won++; team2Stats.points += 3; team1Stats.lost++;
         } else {
           team1Stats.drawn++; team2Stats.drawn++;
-          team1Stats.points += 1; team1Stats.points += 1;
+          team1Stats.points += 1; team2Stats.points += 1;
         }
       }
     });
@@ -356,53 +356,57 @@ export default function GroupStageManagement() {
 
   return (
     <div className="space-y-8">
-      <Card className="w-full max-w-md mx-auto">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 font-headline text-xl sm:text-2xl">
-            <Repeat className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Crear Grupos Aleatorios
-          </CardTitle>
-          <CardDescription>
-            Crea automáticamente un número específico de grupos y asigna equipos disponibles aleatoriamente. Los partidos también se generarán aleatoriamente.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col gap-3">
-            <Input
-              type="number"
-              value={numRandomGroups}
-              onChange={(e) => setNumRandomGroups(e.target.value)}
-              placeholder="Número de grupos"
-              min="1"
-            />
-            <Button onClick={handleCreateRandomGroups} aria-label="Crear grupos aleatorios">
-              <Repeat className="mr-2 h-4 w-4" /> Generar Grupos Aleatorios
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      {isAdminMode && (
+        <>
+          <Card className="w-full max-w-md mx-auto">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 font-headline text-xl sm:text-2xl">
+                <Repeat className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Crear Grupos Aleatorios
+              </CardTitle>
+              <CardDescription>
+                Crea automáticamente un número específico de grupos y asigna equipos disponibles aleatoriamente. Los partidos también se generarán aleatoriamente.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-3">
+                <Input
+                  type="number"
+                  value={numRandomGroups}
+                  onChange={(e) => setNumRandomGroups(e.target.value)}
+                  placeholder="Número de grupos"
+                  min="1"
+                />
+                <Button onClick={handleCreateRandomGroups} aria-label="Crear grupos aleatorios">
+                  <Repeat className="mr-2 h-4 w-4" /> Generar Grupos Aleatorios
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
-      <Card className="w-full max-w-md mx-auto">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 font-headline text-xl sm:text-2xl">
-            <PlusCircle className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Crear Nuevo Grupo Manualmente
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Input
-              type="text"
-              value={groupName}
-              onChange={(e) => setGroupName(e.target.value)}
-              placeholder="Ingresa el nombre del grupo (ej., Grupo A)"
-              className="flex-grow"
-              onKeyPress={(e) => e.key === 'Enter' && handleCreateGroup()}
-            />
-            <Button onClick={handleCreateGroup} aria-label="Crear grupo" className="w-full sm:w-auto">
-              <PlusCircle className="mr-2 h-4 w-4" /> Crear
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          <Card className="w-full max-w-md mx-auto">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 font-headline text-xl sm:text-2xl">
+                <PlusCircle className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Crear Nuevo Grupo Manualmente
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  type="text"
+                  value={groupName}
+                  onChange={(e) => setGroupName(e.target.value)}
+                  placeholder="Ingresa el nombre del grupo (ej., Grupo A)"
+                  className="flex-grow"
+                  onKeyPress={(e) => e.key === 'Enter' && handleCreateGroup()}
+                />
+                <Button onClick={handleCreateGroup} aria-label="Crear grupo" className="w-full sm:w-auto">
+                  <PlusCircle className="mr-2 h-4 w-4" /> Crear
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       {groups.length > 0 && (
         <Card className="w-full max-w-4xl mx-auto">
@@ -417,6 +421,7 @@ export default function GroupStageManagement() {
               onClick={handleExportSelectedGroups}
               disabled={selectedGroupsForExport.length === 0}
               className="w-full"
+              data-html2canvas-ignore="true"
             >
               <Camera className="mr-2 h-4 w-4" />
               Exportar {selectedGroupsForExport.length > 0 ? `${selectedGroupsForExport.length} Grupo(s) Seleccionado(s)` : 'Grupos Seleccionados'}
@@ -431,7 +436,7 @@ export default function GroupStageManagement() {
       )}
 
       {groups.length === 0 && (
-        <p className="text-muted-foreground text-center mt-6">Aún no se han creado grupos. Crea un grupo para gestionar equipos y partidos.</p>
+        <p className="text-muted-foreground text-center mt-6">Aún no se han creado grupos. {isAdminMode && "Crea un grupo para gestionar equipos y partidos."}</p>
       )}
 
       {groups.map((group) => {
@@ -446,61 +451,68 @@ export default function GroupStageManagement() {
                   checked={selectedGroupsForExport.includes(group.id)}
                   onCheckedChange={() => handleToggleGroupForExport(group.id)}
                   aria-label={`Seleccionar grupo ${group.name} para exportación múltiple`}
+                  data-html2canvas-ignore="true"
                 />
                 <Label htmlFor={`select-group-export-${group.id}`} className="cursor-pointer flex-grow">
                     <CardTitle className="font-headline text-xl sm:text-2xl text-primary hover:underline">{group.name}</CardTitle>
                 </Label>
               </div>
-              <CardDescription className="ml-9 sm:ml-0">Gestiona equipos, partidos y clasificaciones para este grupo.</CardDescription>
+              {isAdminMode && <CardDescription className="ml-9 sm:ml-0">Gestiona equipos, partidos y clasificaciones para este grupo.</CardDescription>}
             </div>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                 <Button variant="destructive" size="sm" aria-label={`Eliminar grupo ${group.name}`} className="w-full sm:w-auto self-start sm:self-center">
-                  <Trash2 className="mr-1 h-4 w-4" /> Eliminar Grupo
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Confirmar Eliminación</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    ¿Estás seguro de que quieres eliminar el grupo "{group.name}"? Todos sus equipos y partidos serán eliminados.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => handleDeleteGroup(group.id)}>Eliminar</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            {isAdminMode && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" size="sm" aria-label={`Eliminar grupo ${group.name}`} className="w-full sm:w-auto self-start sm:self-center">
+                    <Trash2 className="mr-1 h-4 w-4" /> Eliminar Grupo
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Confirmar Eliminación</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      ¿Estás seguro de que quieres eliminar el grupo "{group.name}"? Todos sus equipos y partidos serán eliminados.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => handleDeleteGroup(group.id)}>Eliminar</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="p-4 border rounded-md bg-background">
               <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><Users className="h-5 w-5 text-accent" /> Equipos en el Grupo</h3>
-              <div className="flex flex-col sm:flex-row gap-2 mb-3">
-                <Select
-                  value={selectedTeamToAdd[group.id] || ''}
-                  onValueChange={(value) => setSelectedTeamToAdd(prev => ({ ...prev, [group.id]: value }))}
-                >
-                  <SelectTrigger className="flex-grow">
-                    <SelectValue placeholder="Selecciona equipo para añadir" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teams.filter(t => !group.teamIds.includes(t.id)).map(team => (
-                      <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
-                    ))}
-                     {teams.filter(t => !group.teamIds.includes(t.id)).length === 0 && <p className="p-2 text-sm text-muted-foreground">No hay más equipos para añadir.</p>}
-                  </SelectContent>
-                </Select>
-                <Button onClick={() => handleAddTeamToGroup(group.id)} size="sm" aria-label="Añadir equipo seleccionado al grupo" className="w-full sm:w-auto">Añadir Equipo</Button>
-              </div>
+              {isAdminMode && (
+                <div className="flex flex-col sm:flex-row gap-2 mb-3">
+                  <Select
+                    value={selectedTeamToAdd[group.id] || ''}
+                    onValueChange={(value) => setSelectedTeamToAdd(prev => ({ ...prev, [group.id]: value }))}
+                  >
+                    <SelectTrigger className="flex-grow">
+                      <SelectValue placeholder="Selecciona equipo para añadir" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teams.filter(t => !group.teamIds.includes(t.id)).map(team => (
+                        <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                      ))}
+                      {teams.filter(t => !group.teamIds.includes(t.id)).length === 0 && <p className="p-2 text-sm text-muted-foreground">No hay más equipos para añadir.</p>}
+                    </SelectContent>
+                  </Select>
+                  <Button onClick={() => handleAddTeamToGroup(group.id)} size="sm" aria-label="Añadir equipo seleccionado al grupo" className="w-full sm:w-auto">Añadir Equipo</Button>
+                </div>
+              )}
               {group.teamIds.length > 0 ? (
                 <ul className="space-y-1 text-sm">
                   {group.teamIds.map(teamId => (
                     <li key={teamId} className="flex justify-between items-center p-1.5 bg-secondary/30 rounded">
                       {getTeamName(teamId)}
-                      <Button onClick={() => handleRemoveTeamFromGroup(group.id, teamId)} variant="ghost" size="icon" className="h-6 w-6" aria-label={`Eliminar equipo ${getTeamName(teamId)} del grupo`}>
-                        <XCircle className="h-4 w-4 text-destructive" />
-                      </Button>
+                      {isAdminMode && (
+                        <Button onClick={() => handleRemoveTeamFromGroup(group.id, teamId)} variant="ghost" size="icon" className="h-6 w-6" aria-label={`Eliminar equipo ${getTeamName(teamId)} del grupo`}>
+                          <XCircle className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -509,7 +521,7 @@ export default function GroupStageManagement() {
 
             <div className="p-4 border rounded-md bg-background">
               <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><Swords className="h-5 w-5 text-accent" /> Partidos (Orden Aleatorio)</h3>
-              {group.teamIds.length >= 2 && (
+              {isAdminMode && group.teamIds.length >= 2 && (
                  <Button onClick={() => handleGenerateMatches(group.id)} className="w-full mb-3" variant="outline" aria-label="Generar o Re-generar partidos para el grupo">
                   {group.matches.length > 0 ? "Re-generar Partidos (Orden Aleatorio)" : "Generar Partidos (Orden Aleatorio)"}
                 </Button>
@@ -523,35 +535,43 @@ export default function GroupStageManagement() {
                           <span className="break-all"><strong>{getTeamName(match.team1Id)}</strong> vs <strong>{getTeamName(match.team2Id)}</strong></span>
                           {match.played && <span className="text-xs px-1.5 py-0.5 bg-green-200 text-green-800 rounded-full mt-1 sm:mt-0">Jugado</span>}
                         </div>
-                        <div className="flex flex-wrap gap-2 items-center">
-                          <Input
-                            type="number"
-                            min="0"
-                            placeholder="Res. 1"
-                            value={matchScores[match.id]?.team1Score ?? match.team1Score ?? ''}
-                            onChange={(e) => handleScoreChange(group.id, match.id, 'team1', e.target.value)}
-                            className="w-20 h-8 text-xs"
-                            disabled={match.played && (matchScores[match.id] === undefined)}
-                          />
-                          <span>-</span>
-                          <Input
-                            type="number"
-                            min="0"
-                            placeholder="Res. 2"
-                            value={matchScores[match.id]?.team2Score ?? match.team2Score ?? ''}
-                            onChange={(e) => handleScoreChange(group.id, match.id, 'team2', e.target.value)}
-                            className="w-20 h-8 text-xs"
-                            disabled={match.played && (matchScores[match.id] === undefined)}
-                          />
-                          <Button onClick={() => handleUpdateMatchResult(group.id, match.id)} size="sm" variant="outline" className="h-8 text-xs" aria-label="Guardar resultado del partido">
-                            <Save className="mr-1 h-3 w-3" /> Guardar
-                          </Button>
-                        </div>
+                        {isAdminMode ? (
+                          <div className="flex flex-wrap gap-2 items-center">
+                            <Input
+                              type="number"
+                              min="0"
+                              placeholder="Res. 1"
+                              value={matchScores[match.id]?.team1Score ?? match.team1Score ?? ''}
+                              onChange={(e) => handleScoreChange(group.id, match.id, 'team1', e.target.value)}
+                              className="w-20 h-8 text-xs"
+                              disabled={match.played && (matchScores[match.id] === undefined)}
+                            />
+                            <span>-</span>
+                            <Input
+                              type="number"
+                              min="0"
+                              placeholder="Res. 2"
+                              value={matchScores[match.id]?.team2Score ?? match.team2Score ?? ''}
+                              onChange={(e) => handleScoreChange(group.id, match.id, 'team2', e.target.value)}
+                              className="w-20 h-8 text-xs"
+                              disabled={match.played && (matchScores[match.id] === undefined)}
+                            />
+                            <Button onClick={() => handleUpdateMatchResult(group.id, match.id)} size="sm" variant="outline" className="h-8 text-xs" aria-label="Guardar resultado del partido">
+                              <Save className="mr-1 h-3 w-3" /> Guardar
+                            </Button>
+                          </div>
+                        ) : (
+                          match.played ? (
+                            <p className="text-sm">Resultado: {match.team1Score} - {match.team2Score}</p>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">Pendiente</p>
+                          )
+                        )}
                       </li>
                     ))}
                   </ul>
                 </ScrollArea>
-              ) : <p className="text-xs text-muted-foreground">No hay partidos generados o los equipos son insuficientes.</p>}
+              ) : <p className="text-xs text-muted-foreground">No hay partidos generados {isAdminMode ? "o los equipos son insuficientes." : "."}</p>}
             </div>
 
             <div className="p-4 border rounded-md bg-background" ref={el => groupTableRefs.current[group.id] = el}>
@@ -633,53 +653,55 @@ export default function GroupStageManagement() {
                     </div>
                   )}
                 </>
-              ) : <p className="text-xs text-muted-foreground">No hay clasificaciones para mostrar. Añade equipos y registra resultados de partidos.</p>}
+              ) : <p className="text-xs text-muted-foreground">No hay clasificaciones para mostrar. {isAdminMode && "Añade equipos y registra resultados de partidos."}</p>}
             </div>
 
-            <div className="p-4 border rounded-md bg-background">
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="text-lg font-semibold flex items-center gap-2"><Palette className="h-5 w-5 text-accent" /> Zonas de Clasificación del Grupo</h3>
-                <Button size="sm" onClick={() => openZoneModalForGroupNew(group.id)}><PlusCircle className="mr-2 h-4 w-4"/>Añadir Zona al Grupo</Button>
-              </div>
-              {(group.zoneSettings || []).length > 0 ? (
-                <div className="space-y-2">
-                  {(group.zoneSettings || []).map(zone => (
-                    <div key={zone.id} className="flex items-center justify-between p-2 bg-secondary/30 rounded-md">
-                      <div className="flex items-center gap-2">
-                        <span className="h-4 w-4 rounded-sm border border-border" style={{ backgroundColor: zone.color }}></span>
-                        <span>{zone.name} (Pos. {zone.startPosition}{zone.startPosition !== zone.endPosition ? `-${zone.endPosition}` : ''})</span>
-                      </div>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openZoneModalForGroupEdit(group.id, zone)}>
-                          <Edit3 className="h-4 w-4" />
-                        </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive">
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Confirmar Eliminación</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                ¿Estás seguro de que quieres eliminar la zona "{zone.name}" de este grupo?
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDeleteGroupZone(group.id, zone.id)}>Eliminar</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </div>
-                  ))}
+            {isAdminMode && (
+              <div className="p-4 border rounded-md bg-background">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-lg font-semibold flex items-center gap-2"><Palette className="h-5 w-5 text-accent" /> Zonas de Clasificación del Grupo</h3>
+                  <Button size="sm" onClick={() => openZoneModalForGroupNew(group.id)}><PlusCircle className="mr-2 h-4 w-4"/>Añadir Zona al Grupo</Button>
                 </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">No se han configurado zonas de clasificación para este grupo.</p>
-              )}
-            </div>
+                {(group.zoneSettings || []).length > 0 ? (
+                  <div className="space-y-2">
+                    {(group.zoneSettings || []).map(zone => (
+                      <div key={zone.id} className="flex items-center justify-between p-2 bg-secondary/30 rounded-md">
+                        <div className="flex items-center gap-2">
+                          <span className="h-4 w-4 rounded-sm border border-border" style={{ backgroundColor: zone.color }}></span>
+                          <span>{zone.name} (Pos. {zone.startPosition}{zone.startPosition !== zone.endPosition ? `-${zone.endPosition}` : ''})</span>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openZoneModalForGroupEdit(group.id, zone)}>
+                            <Edit3 className="h-4 w-4" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Confirmar Eliminación</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  ¿Estás seguro de que quieres eliminar la zona "{zone.name}" de este grupo?
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeleteGroupZone(group.id, zone.id)}>Eliminar</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No se han configurado zonas de clasificación para este grupo.</p>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       )})}
@@ -761,4 +783,3 @@ export default function GroupStageManagement() {
     </div>
   );
 }
-

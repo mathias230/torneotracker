@@ -29,7 +29,7 @@ const roundOptions = [
 ];
 
 export default function KnockoutStageManagement() {
-  const { teams, knockoutRounds } = useTournamentState();
+  const { teams, knockoutRounds, isAdminMode } = useTournamentState();
   const dispatch = useTournamentDispatch();
   const [startingRoundValue, setStartingRoundValue] = useState<string>('8'); 
   const [selectedTeamsForBracket, setSelectedTeamsForBracket] = useState<string[]>([]);
@@ -108,14 +108,8 @@ export default function KnockoutStageManagement() {
   const playableRounds = knockoutRounds.filter(round => {
     if (round.length === 1 && round[0]) {
       const match = round[0];
-      // Check if it's the champion placeholder slot
-      // This slot is typically the very last round, has one match,
-      // team1Id starts with 'winner-' (or is a real team if bracket is small), and team2Id is null.
       if (knockoutRounds.length > 0 && round === knockoutRounds[knockoutRounds.length - 1] && !match.team2Id) {
-         // If it's also the *only* round (e.g. a 1-team tournament resulting in just a champion slot),
-         // it might be considered playable if we want to display the champion.
-         // However, for rendering distinct rounds, if this is the *final* slot after an actual final match, filter it.
-         if (knockoutRounds.length > 1) return false; // Filter out if it's the champion slot after at least one playable round
+         if (knockoutRounds.length > 1) return false; 
       }
     }
     return round.length > 0;
@@ -146,62 +140,64 @@ export default function KnockoutStageManagement() {
   
   return (
     <div className="space-y-8">
-      <Card className="w-full max-w-lg mx-auto">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 font-headline text-xl sm:text-2xl">
-            <GitFork className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Configurar Cuadro de Eliminatorias
-          </CardTitle>
-          <CardDescription>
-            Selecciona la ronda inicial y los participantes para la fase de eliminación.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label htmlFor="startingRoundSelect">Ronda Inicial del Cuadro</Label>
-            <Select value={startingRoundValue} onValueChange={setStartingRoundValue}>
-              <SelectTrigger id="startingRoundSelect">
-                <SelectValue placeholder="Selecciona la ronda inicial" />
-              </SelectTrigger>
-              <SelectContent>
-                {roundOptions.map(opt => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <div>
-            <Label className="font-semibold">Seleccionar Equipos (Opcional)</Label>
-            <CardDescription className="text-xs mb-2">
-              Si no seleccionas equipos, se usarán los primeros {currentRequiredTeams} equipos de la lista general. 
-              Asegúrate de seleccionar exactamente {currentRequiredTeams} equipos si eliges esta opción.
+      {isAdminMode && (
+        <Card className="w-full max-w-lg mx-auto">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 font-headline text-xl sm:text-2xl">
+              <GitFork className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Configurar Cuadro de Eliminatorias
+            </CardTitle>
+            <CardDescription>
+              Selecciona la ronda inicial y los participantes para la fase de eliminación.
             </CardDescription>
-             <ScrollArea className="h-48 p-2 border rounded-md">
-              <div className="space-y-2">
-                {teams.length > 0 ? teams.map(team => (
-                  <div key={team.id} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`team-select-${team.id}`}
-                      checked={selectedTeamsForBracket.includes(team.id)}
-                      onCheckedChange={() => handleTeamSelectionChange(team.id)}
-                    />
-                    <Label htmlFor={`team-select-${team.id}`} className="text-sm font-normal">
-                      {team.name}
-                    </Label>
-                  </div>
-                )) : <p className="text-xs text-muted-foreground">Aún no se han creado equipos.</p>}
-              </div>
-            </ScrollArea>
-             {selectedTeamsForBracket.length > 0 && (
-              <p className="text-xs mt-1 text-muted-foreground">Seleccionados {selectedTeamsForBracket.length} de {currentRequiredTeams} equipos.</p>
-            )}
-          </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="startingRoundSelect">Ronda Inicial del Cuadro</Label>
+              <Select value={startingRoundValue} onValueChange={setStartingRoundValue}>
+                <SelectTrigger id="startingRoundSelect">
+                  <SelectValue placeholder="Selecciona la ronda inicial" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roundOptions.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <Label className="font-semibold">Seleccionar Equipos (Opcional)</Label>
+              <CardDescription className="text-xs mb-2">
+                Si no seleccionas equipos, se usarán los primeros {currentRequiredTeams} equipos de la lista general. 
+                Asegúrate de seleccionar exactamente {currentRequiredTeams} equipos si eliges esta opción.
+              </CardDescription>
+              <ScrollArea className="h-48 p-2 border rounded-md">
+                <div className="space-y-2">
+                  {teams.length > 0 ? teams.map(team => (
+                    <div key={team.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`team-select-${team.id}`}
+                        checked={selectedTeamsForBracket.includes(team.id)}
+                        onCheckedChange={() => handleTeamSelectionChange(team.id)}
+                      />
+                      <Label htmlFor={`team-select-${team.id}`} className="text-sm font-normal">
+                        {team.name}
+                      </Label>
+                    </div>
+                  )) : <p className="text-xs text-muted-foreground">Aún no se han creado equipos.</p>}
+                </div>
+              </ScrollArea>
+              {selectedTeamsForBracket.length > 0 && (
+                <p className="text-xs mt-1 text-muted-foreground">Seleccionados {selectedTeamsForBracket.length} de {currentRequiredTeams} equipos.</p>
+              )}
+            </div>
 
-          <Button onClick={handleCreateBracket} className="w-full" aria-label="Crear o Recrear Cuadro de Eliminatorias">
-            Crear / Recrear Cuadro
-          </Button>
-        </CardContent>
-      </Card>
+            <Button onClick={handleCreateBracket} className="w-full" aria-label="Crear o Recrear Cuadro de Eliminatorias">
+              Crear / Recrear Cuadro
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {playableRounds.length > 0 && (
         <Card>
@@ -220,9 +216,9 @@ export default function KnockoutStageManagement() {
             <div className="flex items-start space-x-4 sm:space-x-8 min-w-max" ref={bracketRef}>
               {playableRounds.map((round, roundIndex) => {
                 
-                let roundTitleText = `Ronda ${roundIndex + 1}`; // Fallback
+                let roundTitleText = `Ronda ${roundIndex + 1}`; 
 
-                if (numberOfPlayableRounds === 1) { // The only playable round IS the Final
+                if (numberOfPlayableRounds === 1) { 
                     const match = round[0];
                     const championId = (match.played && match.team1Score !== null && match.team2Score !== null)
                         ? (match.team1Score > match.team2Score ? match.team1Id : match.team2Id)
@@ -232,14 +228,13 @@ export default function KnockoutStageManagement() {
                     } else {
                         roundTitleText = "Final";
                     }
-                } else { // Multiple playable rounds
+                } else { 
                     if (roundIndex === numberOfPlayableRounds - 1) roundTitleText = "Final";
                     else if (roundIndex === numberOfPlayableRounds - 2) roundTitleText = "Semifinales";
                     else if (roundIndex === numberOfPlayableRounds - 3) roundTitleText = "Cuartos de Final";
                     else if (roundIndex === numberOfPlayableRounds - 4) roundTitleText = "Octavos de Final";
                     else if (roundIndex === numberOfPlayableRounds - 5) roundTitleText = "Dieciseisavos de Final";
 
-                    // If this IS the "Final" round (last of multiple playable rounds) and a champion is decided
                     if (roundTitleText === "Final" && round.length === 1) {
                         const match = round[0];
                         const championId = (match.played && match.team1Score !== null && match.team2Score !== null)
@@ -265,12 +260,12 @@ export default function KnockoutStageManagement() {
                                               
                         const team1IsPlaceholder = !match.team1Id || match.team1Id.startsWith('winner-') || match.team1Id.startsWith('placeholder-');
                         const team2IsPlaceholder = !match.team2Id || match.team2Id.startsWith('winner-') || match.team2Id.startsWith('placeholder-');
-                        const canEditScores = (!match.played || matchScores[match.id] !== undefined) && !team1IsPlaceholder && !team2IsPlaceholder;
+                        const canEditScores = isAdminMode && (!match.played || matchScores[match.id] !== undefined) && !team1IsPlaceholder && !team2IsPlaceholder;
 
                         return (
                           <div key={match.id} className="bg-card rounded-lg shadow-md relative isolate">
                             
-                            {isActualFinalMatchAndWon && winnerId ? ( // Check winnerId too for safety
+                            {isActualFinalMatchAndWon && winnerId ? ( 
                               <div className="text-center py-6 sm:py-8 px-4">
                                 <Trophy className="h-12 w-12 sm:h-16 sm:w-16 text-amber-400 mx-auto mb-3 sm:mb-4" />
                                 <p className="text-xl sm:text-2xl font-bold text-primary truncate px-2">{getTeamName(winnerId)}</p>
@@ -290,15 +285,21 @@ export default function KnockoutStageManagement() {
                                   >
                                     {getTeamName(match.team1Id, match.placeholder || (match.roundIndex === 0 ? `Equipo ${match.matchIndexInRound * 2 + 1}`: `Ganador Partido ${String.fromCharCode(65 + match.matchIndexInRound * 2)}`))}
                                   </span>
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    placeholder="-"
-                                    value={matchScores[match.id]?.team1Score ?? match.team1Score ?? ''}
-                                    onChange={(e) => handleScoreChange(match.id, 'team1', e.target.value)}
-                                    className="w-12 sm:w-16 h-auto text-xs sm:text-sm text-center rounded-l-none rounded-r-md border-l-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                                    disabled={team1IsPlaceholder || (match.played && matchScores[match.id] === undefined)}
-                                  />
+                                  {isAdminMode ? (
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      placeholder="-"
+                                      value={matchScores[match.id]?.team1Score ?? match.team1Score ?? ''}
+                                      onChange={(e) => handleScoreChange(match.id, 'team1', e.target.value)}
+                                      className="w-12 sm:w-16 h-auto text-xs sm:text-sm text-center rounded-l-none rounded-r-md border-l-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                                      disabled={team1IsPlaceholder || (match.played && matchScores[match.id] === undefined)}
+                                    />
+                                  ) : (
+                                    <span className="w-12 sm:w-16 py-2 px-3 text-xs sm:text-sm text-center bg-muted rounded-r-md border-l border-border">
+                                      {match.team1Score ?? '-'}
+                                    </span>
+                                  )}
                                 </div>
 
                                 <div className="flex items-stretch">
@@ -313,22 +314,28 @@ export default function KnockoutStageManagement() {
                                    >
                                      {getTeamName(match.team2Id, match.placeholder || (match.roundIndex === 0 ? `Equipo ${match.matchIndexInRound * 2 + 2}`: `Ganador Partido ${String.fromCharCode(65 + match.matchIndexInRound * 2 + 1)}`))}
                                    </span>
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    placeholder="-"
-                                    value={matchScores[match.id]?.team2Score ?? match.team2Score ?? ''}
-                                    onChange={(e) => handleScoreChange(match.id, 'team2', e.target.value)}
-                                    className="w-12 sm:w-16 h-auto text-xs sm:text-sm text-center rounded-l-none rounded-r-md border-l-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                                    disabled={team2IsPlaceholder || (match.played && matchScores[match.id] === undefined)}
-                                  />
+                                  {isAdminMode ? (
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      placeholder="-"
+                                      value={matchScores[match.id]?.team2Score ?? match.team2Score ?? ''}
+                                      onChange={(e) => handleScoreChange(match.id, 'team2', e.target.value)}
+                                      className="w-12 sm:w-16 h-auto text-xs sm:text-sm text-center rounded-l-none rounded-r-md border-l-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                                      disabled={team2IsPlaceholder || (match.played && matchScores[match.id] === undefined)}
+                                    />
+                                  ) : (
+                                     <span className="w-12 sm:w-16 py-2 px-3 text-xs sm:text-sm text-center bg-muted rounded-r-md border-l border-border">
+                                      {match.team2Score ?? '-'}
+                                    </span>
+                                  )}
                                 </div>
 
-                                {(team1IsPlaceholder || team2IsPlaceholder) && (
+                                {isAdminMode && (team1IsPlaceholder || team2IsPlaceholder) && (
                                     <p className="text-xs text-muted-foreground text-center pt-1">Esperando equipos...</p>
                                   )}
                                 
-                                {!team1IsPlaceholder && !team2IsPlaceholder && (
+                                {isAdminMode && !team1IsPlaceholder && !team2IsPlaceholder && (
                                     <Button
                                       onClick={() => handleUpdateMatchResult(match.roundIndex, match.matchIndexInRound, match.id)}
                                       size="sm"
@@ -341,9 +348,16 @@ export default function KnockoutStageManagement() {
                                     </Button>
                                   )
                                 }
+                                 {!isAdminMode && match.played && !isActualFinalMatchAndWon && (
+                                  <p className="text-xs text-muted-foreground text-center pt-1">
+                                    Resultado: {match.team1Score} - {match.team2Score}
+                                  </p>
+                                )}
+                                {!isAdminMode && !match.played && !team1IsPlaceholder && !team2IsPlaceholder && (
+                                  <p className="text-xs text-muted-foreground text-center pt-1">Pendiente</p>
+                                )}
                               </div>
                             )}
-                            {/* Connector lines: Only draw if there's a next playable round */}
                             {(roundIndex < numberOfPlayableRounds - 1) && ( 
                               <>
                                 <div className="absolute top-1/2 -right-2 sm:-right-4 transform -translate-y-1/2 w-2 sm:w-4 h-px bg-border -z-10"></div>
@@ -371,9 +385,8 @@ export default function KnockoutStageManagement() {
         </Card>
       )}
       {playableRounds.length === 0 && (
-        <p className="text-muted-foreground text-center mt-6">Aún no se ha generado un cuadro de eliminatorias. Configura y crea uno arriba.</p>
+        <p className="text-muted-foreground text-center mt-6">Aún no se ha generado un cuadro de eliminatorias. {isAdminMode && "Configura y crea uno arriba."}</p>
       )}
     </div>
   );
 }
-

@@ -5,7 +5,7 @@ import { useTournamentState, useTournamentDispatch, useIsClient } from '@/compon
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlusCircle, Trash2, Edit3, Save, XCircle } from 'lucide-react';
+import { PlusCircle, Trash2, Edit3, Save, XCircle, Users } from 'lucide-react';
 import { toast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export default function TeamManagement() {
-  const { teams } = useTournamentState();
+  const { teams, isAdminMode } = useTournamentState();
   const dispatch = useTournamentDispatch();
   const [teamName, setTeamName] = useState('');
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
@@ -75,26 +75,29 @@ export default function TeamManagement() {
     <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 font-headline text-xl sm:text-2xl">
-          <PlusCircle className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Gestionar Equipos
+          {isAdminMode ? <PlusCircle className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> : <Users className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />}
+          {isAdminMode ? "Gestionar Equipos" : "Equipos del Torneo"}
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex flex-col sm:flex-row gap-2 mb-6">
-          <Input
-            type="text"
-            value={teamName}
-            onChange={(e) => setTeamName(e.target.value)}
-            placeholder="Ingresa el nombre del equipo"
-            className="flex-grow"
-            onKeyPress={(e) => e.key === 'Enter' && handleAddTeam()}
-          />
-          <Button onClick={handleAddTeam} aria-label="Añadir equipo" className="w-full sm:w-auto">
-            <PlusCircle className="mr-2 h-4 w-4" /> Añadir Equipo
-          </Button>
-        </div>
+        {isAdminMode && (
+          <div className="flex flex-col sm:flex-row gap-2 mb-6">
+            <Input
+              type="text"
+              value={teamName}
+              onChange={(e) => setTeamName(e.target.value)}
+              placeholder="Ingresa el nombre del equipo"
+              className="flex-grow"
+              onKeyPress={(e) => e.key === 'Enter' && handleAddTeam()}
+            />
+            <Button onClick={handleAddTeam} aria-label="Añadir equipo" className="w-full sm:w-auto">
+              <PlusCircle className="mr-2 h-4 w-4" /> Añadir Equipo
+            </Button>
+          </div>
+        )}
 
         {teams.length === 0 ? (
-          <p className="text-muted-foreground text-center">No hay equipos añadidos aún. ¡Añade algunos equipos para empezar!</p>
+          <p className="text-muted-foreground text-center">No hay equipos añadidos aún. {isAdminMode && "¡Añade algunos equipos para empezar!"}</p>
         ) : (
           <ul className="space-y-3">
             {teams.map((team) => (
@@ -102,7 +105,7 @@ export default function TeamManagement() {
                 key={team.id}
                 className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 bg-secondary/50 rounded-md shadow-sm hover:shadow-md transition-shadow"
               >
-                {editingTeamId === team.id ? (
+                {isAdminMode && editingTeamId === team.id ? (
                   <div className="flex-grow flex w-full items-center gap-2 mb-2 sm:mb-0">
                     <Input 
                       value={editingTeamName} 
@@ -120,30 +123,32 @@ export default function TeamManagement() {
                 ) : (
                   <>
                     <span className="text-foreground font-medium mb-2 sm:mb-0 break-all">{team.name}</span>
-                    <div className="flex gap-2 self-end sm:self-center">
-                      <Button onClick={() => handleEditTeam(team.id, team.name)} variant="outline" size="sm" aria-label={`Editar equipo ${team.name}`}>
-                        <Edit3 className="h-4 w-4" />
-                      </Button>
-                       <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                           <Button variant="destructive" size="sm" aria-label={`Eliminar equipo ${team.name}`}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Confirmar Eliminación</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              ¿Estás seguro de que quieres eliminar el equipo "{team.name}"? Esto podría afectar a grupos y partidos existentes.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDeleteTeam(team.id)}>Eliminar</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
+                    {isAdminMode && (
+                      <div className="flex gap-2 self-end sm:self-center">
+                        <Button onClick={() => handleEditTeam(team.id, team.name)} variant="outline" size="sm" aria-label={`Editar equipo ${team.name}`}>
+                          <Edit3 className="h-4 w-4" />
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="destructive" size="sm" aria-label={`Eliminar equipo ${team.name}`}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Confirmar Eliminación</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                ¿Estás seguro de que quieres eliminar el equipo "{team.name}"? Esto podría afectar a grupos y partidos existentes.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDeleteTeam(team.id)}>Eliminar</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    )}
                   </>
                 )}
               </li>
