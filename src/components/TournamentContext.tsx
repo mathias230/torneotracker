@@ -1,11 +1,11 @@
 
 "use client";
 import type { Dispatch } from 'react';
-import React, { createContext, useContext, useReducer, useEffect } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useState } from 'react';
 import type { TournamentState, TournamentAction, Team, Group, Match, GroupTeamStats, KnockoutMatch, League, LeagueZoneSetting } from '@/types';
 import { toast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebaseConfig'; // Importar la instancia de Firestore
-import { doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 const initialState: TournamentState = {
   teams: [],
@@ -13,7 +13,7 @@ const initialState: TournamentState = {
   league: null,
   knockoutRounds: [],
   isInitialized: false,
-  isAdminMode: false, // Default is false
+  isAdminMode: false, 
 };
 
 // Fisher-Yates Shuffle Algorithm
@@ -130,7 +130,8 @@ const TOURNAMENT_DOC_PATH = "tournaments_shared/default_tournament";
 
 const saveTournamentStateToFirestore = async (state: TournamentState) => {
   try {
-    const { isInitialized, ...stateToSave } = state;
+    // Destructure to exclude isInitialized if it's purely client-side and not meant for Firestore
+    const { isInitialized, ...stateToSave } = state; 
     const tournamentDocRef = doc(db, TOURNAMENT_DOC_PATH);
     await setDoc(tournamentDocRef, stateToSave);
     console.log("Tournament state saved to Firestore");
@@ -153,7 +154,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
     case 'ADD_TEAM': {
       const newTeam: Team = { id: `team-${Date.now()}`, name: action.payload.name };
       newState = { ...state, teams: [...state.teams, newTeam] };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'DELETE_TEAM': {
@@ -169,7 +169,7 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         const newLeagueTeamIds = state.league.teamIds.filter(id => id !== teamIdToDelete);
         if (newLeagueTeamIds.length < 2) {
           updatedLeague = null;
-          toast({ title: "Liga Borrada", description: `El equipo ${state.teams.find(t=>t.id === teamIdToDelete)?.name || teamIdToDelete} fue eliminado, haciendo la liga inviable. La liga ha sido borrada.`, variant: "default" });
+          // Toast for league deletion due to team removal should be handled in the component triggering DELETE_TEAM
         } else {
           updatedLeague = {
             ...state.league,
@@ -183,10 +183,8 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         teams: state.teams.filter(team => team.id !== teamIdToDelete),
         groups: updatedGroups,
         league: updatedLeague,
-        // isAdminMode should persist unless explicitly changed
         isAdminMode: state.isAdminMode,
       };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'EDIT_TEAM_NAME': {
@@ -219,7 +217,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         }))),
         isAdminMode: state.isAdminMode,
       };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'CREATE_GROUP': {
@@ -231,7 +228,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         zoneSettings: [],
       };
       newState = { ...state, groups: [...state.groups, newGroupManual] };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'DELETE_GROUP': {
@@ -239,7 +235,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         ...state,
         groups: state.groups.filter(group => group.id !== action.payload.groupId)
       };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'ADD_TEAM_TO_GROUP': {
@@ -251,7 +246,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
             : group
         ),
       };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'REMOVE_TEAM_FROM_GROUP': {
@@ -263,7 +257,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
             : group
         ),
       };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'GENERATE_GROUP_MATCHES': {
@@ -277,7 +270,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
           return group;
         }),
       };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'UPDATE_GROUP_MATCH_RESULT': {
@@ -297,13 +289,12 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
             : group
         ),
       };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'CREATE_KNOCKOUT_STAGE': {
       const { numTeams, selectedTeamIds } = action.payload;
       if (numTeams < 2 || (numTeams & (numTeams - 1)) !== 0) {
-        toast({ title: "Error", description: "El número de equipos para eliminatorias debe ser una potencia de 2 (ej. 2, 4, 8, 16).", variant: "destructive" });
+        // Toast for error should be handled in the component dispatching
         return state; 
       }
 
@@ -374,10 +365,9 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         currentRoundTeams = nextRoundPlaceholders;
         teamsInCurrentRound /= 2;
         roundIndex++;
-         if (roundIndex > 10) break;
+         if (roundIndex > 10) break; 
       }
       newState = { ...state, knockoutRounds: rounds };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'UPDATE_KNOCKOUT_MATCH_RESULT': {
@@ -424,23 +414,14 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         }
       }
       newState = { ...state, knockoutRounds: newKnockoutRounds };
-      saveTournamentStateToFirestore(newState);
       break;
     }
      case 'RANDOMLY_CREATE_GROUPS_AND_ASSIGN_TEAMS': {
       const { numGroups, groupNamePrefix = "Grupo" } = action.payload;
       const { teams } = state;
 
-      if (numGroups <= 0) {
-        toast({ title: "Error", description: "El número de grupos debe ser mayor que 0.", variant: "destructive" });
-        return state;
-      }
-      if (teams.length === 0 ) {
-        toast({ title: "Error", description: "No hay equipos disponibles para asignar a grupos. Por favor, añade equipos primero.", variant: "destructive" });
-        return state;
-      }
-      if (teams.length < numGroups) {
-         toast({ title: "Error", description: `No hay suficientes equipos (tienes ${teams.length}) para crear ${numGroups} grupos con al menos un equipo cada uno.`, variant: "destructive" });
+      if (numGroups <= 0 || teams.length === 0 || teams.length < numGroups) {
+        // Toast for error should be handled in the component dispatching
         return state;
       }
 
@@ -479,13 +460,12 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         ...state,
         groups: [...state.groups, ...newGroups],
       };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'SETUP_LEAGUE': {
       const { name, teamIds, playEachTeamTwice } = action.payload;
       if (teamIds.length < 2) {
-        toast({ title: "Error", description: "Una liga requiere al menos 2 equipos.", variant: "destructive" });
+        // Toast for error should be handled in the component dispatching
         return state;
       }
       const leagueMatches = generateRoundRobinMatches(teamIds, state.teams, playEachTeamTwice);
@@ -498,21 +478,15 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         zoneSettings: [],
       };
       newState = { ...state, league: newLeague };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'CLEAR_LEAGUE': {
       newState = { ...state, league: null };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'GENERATE_LEAGUE_MATCHES': {
-      if (!state.league) {
-        toast({ title: "Error", description: "No hay ninguna liga configurada para generar partidos.", variant: "destructive" });
-        return state;
-      }
-      if (state.league.teamIds.length < 2) {
-         toast({ title: "Error", description: "La liga necesita al menos 2 equipos para generar partidos.", variant: "destructive" });
+      if (!state.league || state.league.teamIds.length < 2) {
+        // Toast for error should be handled in the component dispatching
         return state;
       }
       const leagueMatches = generateRoundRobinMatches(state.league.teamIds, state.teams, !!state.league.playEachTeamTwice);
@@ -520,7 +494,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         ...state,
         league: { ...state.league, matches: leagueMatches },
       };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'UPDATE_LEAGUE_MATCH_RESULT': {
@@ -537,7 +510,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
           ),
         },
       };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'ADD_LEAGUE_ZONE': {
@@ -557,7 +529,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
           zoneSettings: [...state.league.zoneSettings, newZone],
         },
       };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'EDIT_LEAGUE_ZONE': {
@@ -571,7 +542,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
           ),
         },
       };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'DELETE_LEAGUE_ZONE': {
@@ -583,7 +553,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
           zoneSettings: state.league.zoneSettings.filter(zone => zone.id !== action.payload.zoneId),
         },
       };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'ADD_GROUP_ZONE': {
@@ -603,7 +572,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
             : group
         ),
       };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'EDIT_GROUP_ZONE': {
@@ -621,7 +589,6 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
             : group
         ),
       };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'DELETE_GROUP_ZONE': {
@@ -637,31 +604,24 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
             : group
         ),
       };
-      saveTournamentStateToFirestore(newState);
       break;
     }
     case 'SET_ADMIN_MODE':
-      // Ensure a new state object is created to trigger re-renders.
-      // No need to save to Firestore for this UI-only state change.
-      return {
-        ...state,
-        isAdminMode: action.payload,
-      };
+      newState = { ...state, isAdminMode: action.payload };
+      console.log("TournamentContext [SET_ADMIN_MODE]: New isAdminMode:", action.payload, "Full new state:", newState);
+      break;
     case 'RESET_TOURNAMENT': {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('tournamentState');
       }
-      // Explicitly set isAdminMode to false and ensure isInitialized is true
       newState = { ...initialState, isAdminMode: false, isInitialized: true };
-      // Firestore: Borrar el documento del torneo
       const tournamentDocRef = doc(db, TOURNAMENT_DOC_PATH);
       deleteDoc(tournamentDocRef).then(() => {
         console.log("Tournament data deleted from Firestore");
       }).catch(error => {
         console.error("Error deleting tournament data from Firestore:", error);
       });
-      // IMPORTANT: Added missing break;
-      break;
+      break; // Added missing break
     }
     default:
       return state;
@@ -679,18 +639,17 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedStateString = localStorage.getItem('tournamentState');
-      console.log("TournamentContext [LOAD]: Raw from localStorage:", savedStateString); 
-      let stateToInitialize: TournamentState = { ...initialState, isInitialized: false }; 
+      console.log("TournamentContext [LOAD]: Raw from localStorage:", savedStateString);
+      let statePayload: TournamentState = { ...initialState, isInitialized: false };
 
       if (savedStateString) {
         try {
-          const loaded = JSON.parse(savedStateString) as Partial<TournamentState>;
-          console.log("TournamentContext [LOAD]: Parsed from localStorage:", loaded); 
+          const loadedSavedState = JSON.parse(savedStateString) as Partial<TournamentState>;
+          console.log("TournamentContext [LOAD]: Parsed from localStorage:", loadedSavedState);
           
-          // Merge loaded state with initial state to ensure all properties are present
-          stateToInitialize = {
-            teams: loaded.teams || initialState.teams,
-            groups: (loaded.groups || initialState.groups).map(g => ({
+          statePayload = {
+            teams: loadedSavedState.teams || initialState.teams,
+            groups: (loadedSavedState.groups || initialState.groups).map(g => ({
               id: g.id || `group-${Date.now()}-${Math.random().toString(36).substring(2,7)}`,
               name: g.name || 'Grupo',
               matches: g.matches || [],
@@ -705,14 +664,14 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               })),
               ...g
             })),
-            knockoutRounds: loaded.knockoutRounds || initialState.knockoutRounds,
-            league: loaded.league ? {
-              id: loaded.league.id || `league-${Date.now()}`,
-              name: loaded.league.name || 'Mi Liga',
-              teamIds: loaded.league.teamIds || [],
-              matches: loaded.league.matches || [],
-              playEachTeamTwice: typeof loaded.league.playEachTeamTwice === 'boolean' ? loaded.league.playEachTeamTwice : false,
-              zoneSettings: (loaded.league.zoneSettings || []).map(zs => ({
+            knockoutRounds: loadedSavedState.knockoutRounds || initialState.knockoutRounds,
+            league: loadedSavedState.league ? {
+              id: loadedSavedState.league.id || `league-${Date.now()}`,
+              name: loadedSavedState.league.name || 'Mi Liga',
+              teamIds: loadedSavedState.league.teamIds || [],
+              matches: loadedSavedState.league.matches || [],
+              playEachTeamTwice: typeof loadedSavedState.league.playEachTeamTwice === 'boolean' ? loadedSavedState.league.playEachTeamTwice : false,
+              zoneSettings: (loadedSavedState.league.zoneSettings || []).map(zs => ({
                 id: zs.id || `zone-${Date.now()}-${Math.random().toString(36).substring(2,7)}`,
                 name: zs.name || 'Zona sin nombre',
                 startPosition: typeof zs.startPosition === 'number' ? zs.startPosition : (typeof (zs as any).positions === 'number' ? 1 : 0), 
@@ -721,28 +680,29 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 ...zs
               })),
             } : initialState.league,
-            isAdminMode: typeof loaded.isAdminMode === 'boolean' ? loaded.isAdminMode : initialState.isAdminMode,
-            isInitialized: false, // Reducer will set this to true
+            isAdminMode: typeof loadedSavedState.isAdminMode === 'boolean' ? loadedSavedState.isAdminMode : initialState.isAdminMode,
+            isInitialized: false, 
           };
-          console.log("TournamentContext [LOAD]: isAdminMode after attempting to load:", stateToInitialize.isAdminMode); 
+          console.log("TournamentContext [LOAD]: isAdminMode after attempting to load:", statePayload.isAdminMode);
         } catch (error) {
           console.error("TournamentContext [LOAD]: Error parsing localStorage, using defaults.", error);
-          stateToInitialize = { ...initialState, isInitialized: false };
+          statePayload = { ...initialState, isInitialized: false };
         }
       } else {
         console.log("TournamentContext [LOAD]: No state in localStorage, using defaults.");
-        stateToInitialize = { ...initialState, isInitialized: false };
+        statePayload = { ...initialState, isInitialized: false, isAdminMode: initialState.isAdminMode };
       }
-      dispatch({ type: 'INITIALIZE_STATE', payload: stateToInitialize });
+      dispatch({ type: 'INITIALIZE_STATE', payload: statePayload });
     }
   }, []);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && state.isInitialized) {
-      console.log("TournamentContext [SAVE]: Saving to localStorage:", state); 
+    if (state.isInitialized) {
+      console.log("TournamentContext [SAVE]: Saving to localStorage and Firestore. Current isAdminMode:", state.isAdminMode, "Full state:", state);
       localStorage.setItem('tournamentState', JSON.stringify(state));
+      saveTournamentStateToFirestore(state); // Save to Firestore as a side effect
     }
-  }, [state]);
+  }, [state]); // This useEffect runs after every state change and after initialization
 
   if (!state.isInitialized) {
     return <div className="flex justify-center items-center h-screen"><p>Cargando datos del torneo...</p></div>;
@@ -791,6 +751,3 @@ export const useIsClient = () => {
   useEffect(() => setIsClient(true), []);
   return isClient;
 }
-
-
-    
