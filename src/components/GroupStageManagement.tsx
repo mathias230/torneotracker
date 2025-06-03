@@ -1,6 +1,6 @@
 
 "use client";
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useTournamentState, useTournamentDispatch, useIsClient } from '@/components/TournamentContext';
 import type { Group, Team, Match, GroupTeamStats, LeagueZoneSetting } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { PlusCircle, Trash2, Users, ListChecks, Swords, Save, XCircle, Repeat, Palette, Edit3 } from 'lucide-react';
+import { PlusCircle, Trash2, Users, ListChecks, Swords, Save, XCircle, Repeat, Palette, Edit3, Camera } from 'lucide-react';
 import { toast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Label } from '@/components/ui/label';
+import { exportElementAsImageWithTheme } from '@/lib/exportToImage';
 
 
 interface MatchScoreInput {
@@ -60,6 +61,9 @@ export default function GroupStageManagement() {
   const [currentZone, setCurrentZone] = useState<ZoneFormState>({ name: '', startPosition: '1', endPosition: '1', color: '#4CAF50' });
   const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
   const [activeGroupIdForZoneModal, setActiveGroupIdForZoneModal] = useState<string | null>(null);
+
+  // Store refs for each group's table + legend
+  const groupTableRefs = useRef<{ [groupId: string]: HTMLDivElement | null }>({});
 
 
   const handleCreateGroup = () => {
@@ -266,6 +270,19 @@ export default function GroupStageManagement() {
     return sortedZones.find(zone => position >= zone.startPosition && position <= zone.endPosition);
   };
 
+  const handleGroupTableExport = (group: Group) => {
+    const groupElement = groupTableRefs.current[group.id];
+    if (groupElement) {
+      exportElementAsImageWithTheme(groupElement, `grupo_${group.name}_clasificacion`);
+    } else {
+       toast({
+        title: "Error al Exportar",
+        description: `No se pudo encontrar la tabla del grupo ${group.name} para exportar.`,
+        variant: "destructive",
+      });
+    }
+  };
+
 
   if (!isClient) {
      return <Card className="w-full max-w-4xl mx-auto mt-6">
@@ -436,8 +453,13 @@ export default function GroupStageManagement() {
               ) : <p className="text-xs text-muted-foreground">No hay partidos generados o los equipos son insuficientes.</p>}
             </div>
 
-            <div className="p-4 border rounded-md bg-background">
-              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><ListChecks className="h-5 w-5 text-accent" /> Clasificación del Grupo</h3>
+            <div className="p-4 border rounded-md bg-background" ref={el => groupTableRefs.current[group.id] = el}>
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-lg font-semibold flex items-center gap-2"><ListChecks className="h-5 w-5 text-accent" /> Clasificación del Grupo</h3>
+                 <Button onClick={() => handleGroupTableExport(group)} variant="outline" size="sm">
+                  <Camera className="mr-2 h-4 w-4" /> Tomar Foto
+                </Button>
+              </div>
               {getGroupStandings(group.id).length > 0 ? (
                 <>
                   <ScrollArea className="max-w-full">
