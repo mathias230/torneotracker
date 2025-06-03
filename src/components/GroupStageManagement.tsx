@@ -34,6 +34,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Label } from '@/components/ui/label';
 import { exportElementAsImageWithTheme } from '@/lib/exportToImage';
+import { Checkbox } from '@/components/ui/checkbox';
 
 
 interface MatchScoreInput {
@@ -62,8 +63,8 @@ export default function GroupStageManagement() {
   const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
   const [activeGroupIdForZoneModal, setActiveGroupIdForZoneModal] = useState<string | null>(null);
 
-  // Store refs for each group's table + legend
   const groupTableRefs = useRef<{ [groupId: string]: HTMLDivElement | null }>({});
+  const [selectedGroupsForExport, setSelectedGroupsForExport] = useState<string[]>([]);
 
 
   const handleCreateGroup = () => {
@@ -78,6 +79,7 @@ export default function GroupStageManagement() {
 
   const handleDeleteGroup = (groupId: string) => {
     dispatch({ type: 'DELETE_GROUP', payload: { groupId } });
+    setSelectedGroupsForExport(prev => prev.filter(id => id !== groupId)); // Deselect if deleted
     toast({ title: "Éxito", description: "Grupo eliminado." });
   };
 
@@ -165,7 +167,7 @@ export default function GroupStageManagement() {
           team2Stats.won++; team2Stats.points += 3; team1Stats.lost++;
         } else {
           team1Stats.drawn++; team2Stats.drawn++;
-          team1Stats.points += 1; team2Stats.points += 1;
+          team1Stats.points += 1; team1Stats.points += 1;
         }
       }
     });
@@ -283,6 +285,71 @@ export default function GroupStageManagement() {
     }
   };
 
+  const handleToggleGroupForExport = (groupId: string) => {
+    setSelectedGroupsForExport(prev =>
+      prev.includes(groupId)
+        ? prev.filter(id => id !== groupId)
+        : [...prev, groupId]
+    );
+  };
+
+  const handleExportSelectedGroups = async () => {
+    if (selectedGroupsForExport.length === 0) {
+      toast({ title: "Nada que exportar", description: "Por favor, selecciona al menos un grupo para exportar.", variant: "default" });
+      return;
+    }
+
+    const tempContainer = document.createElement('div');
+    // Style the container for off-screen rendering but still in DOM for html2canvas
+    tempContainer.style.position = 'absolute';
+    tempContainer.style.left = '-9999px'; // Position it off-screen
+    tempContainer.style.width = 'auto'; // Allow it to expand based on content
+    tempContainer.style.padding = '20px'; // Add some padding around the content
+    tempContainer.style.backgroundColor = getComputedStyle(document.documentElement).getPropertyValue('background-color').trim() || '#ffffff';
+
+
+    const clonedElementsPromises = selectedGroupsForExport.map(async groupId => {
+      const groupElement = groupTableRefs.current[groupId];
+      if (groupElement) {
+        // Create a wrapper for each group to control its width and spacing
+        const wrapper = document.createElement('div');
+        wrapper.style.marginBottom = '20px'; // Space between groups
+        wrapper.style.border = '1px solid #e0e0e0'; // Optional: visual separation
+        wrapper.style.padding = '10px'; // Optional: padding within each group's "box" in the image
+        
+        const clone = groupElement.cloneNode(true) as HTMLElement;
+        // Set clone width explicitly to avoid issues with html2canvas rendering
+        // Use scrollWidth to capture full width if it's wider than viewport
+        clone.style.width = `${groupElement.scrollWidth}px`; 
+        wrapper.appendChild(clone);
+        return wrapper;
+      }
+      return null;
+    });
+
+    const resolvedClonedElements = (await Promise.all(clonedElementsPromises)).filter(el => el !== null) as HTMLElement[];
+
+    if (resolvedClonedElements.length === 0) {
+        toast({ title: "Error", description: "No se pudieron encontrar los elementos de los grupos seleccionados.", variant: "destructive"});
+        return;
+    }
+    
+    resolvedClonedElements.forEach(el => tempContainer.appendChild(el));
+    document.body.appendChild(tempContainer);
+
+    try {
+      await exportElementAsImageWithTheme(tempContainer, `multi_grupos_export`);
+      setSelectedGroupsForExport([]); // Clear selection after export
+    } catch (error) {
+      console.error("Error al exportar grupos seleccionados:", error);
+      toast({ title: "Error de Exportación", description: "Ocurrió un problema al generar la imagen combinada.", variant: "destructive" });
+    } finally {
+      if (document.body.contains(tempContainer)) {
+        document.body.removeChild(tempContainer);
+      }
+    }
+  };
+
 
   if (!isClient) {
      return <Card className="w-full max-w-4xl mx-auto mt-6">
@@ -341,6 +408,32 @@ export default function GroupStageManagement() {
         </CardContent>
       </Card>
 
+      {groups.length > 0 && (
+        <Card className="w-full max-w-4xl mx-auto">
+          <CardHeader>
+            <CardTitle>Exportar Múltiples Grupos</CardTitle>
+            <CardDescription>
+              Selecciona los grupos que deseas incluir en una sola imagen. Se apilarán verticalmente.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={handleExportSelectedGroups}
+              disabled={selectedGroupsForExport.length === 0}
+              className="w-full"
+            >
+              <Camera className="mr-2 h-4 w-4" />
+              Exportar {selectedGroupsForExport.length > 0 ? `${selectedGroupsForExport.length} Grupo(s) Seleccionado(s)` : 'Grupos Seleccionados'}
+            </Button>
+            {selectedGroupsForExport.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                    Grupos seleccionados para exportar: {selectedGroupsForExport.map(id => groups.find(g => g.id === id)?.name).filter(Boolean).join(', ')}
+                </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {groups.length === 0 && (
         <p className="text-muted-foreground text-center mt-6">Aún no se han creado grupos. Crea un grupo para gestionar equipos y partidos.</p>
       )}
@@ -348,13 +441,23 @@ export default function GroupStageManagement() {
       {groups.map((group) => (
         <Card key={group.id} className="w-full max-w-4xl mx-auto shadow-lg">
           <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-            <div>
-              <CardTitle className="font-headline text-xl sm:text-2xl text-primary">{group.name}</CardTitle>
-              <CardDescription>Gestiona equipos, partidos y clasificaciones para este grupo.</CardDescription>
+            <div className="flex-grow">
+              <div className="flex items-center gap-3 mb-1">
+                <Checkbox
+                  id={`select-group-export-${group.id}`}
+                  checked={selectedGroupsForExport.includes(group.id)}
+                  onCheckedChange={() => handleToggleGroupForExport(group.id)}
+                  aria-label={`Seleccionar grupo ${group.name} para exportación múltiple`}
+                />
+                <Label htmlFor={`select-group-export-${group.id}`} className="cursor-pointer flex-grow">
+                    <CardTitle className="font-headline text-xl sm:text-2xl text-primary hover:underline">{group.name}</CardTitle>
+                </Label>
+              </div>
+              <CardDescription className="ml-9 sm:ml-0">Gestiona equipos, partidos y clasificaciones para este grupo.</CardDescription>
             </div>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                 <Button variant="destructive" size="sm" aria-label={`Eliminar grupo ${group.name}`} className="w-full sm:w-auto">
+                 <Button variant="destructive" size="sm" aria-label={`Eliminar grupo ${group.name}`} className="w-full sm:w-auto self-start sm:self-center">
                   <Trash2 className="mr-1 h-4 w-4" /> Eliminar Grupo
                 </Button>
               </AlertDialogTrigger>
@@ -457,7 +560,7 @@ export default function GroupStageManagement() {
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-lg font-semibold flex items-center gap-2"><ListChecks className="h-5 w-5 text-accent" /> Clasificación del Grupo</h3>
                  <Button onClick={() => handleGroupTableExport(group)} variant="outline" size="sm">
-                  <Camera className="mr-2 h-4 w-4" /> Tomar Foto
+                  <Camera className="mr-2 h-4 w-4" /> Tomar Foto (Individual)
                 </Button>
               </div>
               {getGroupStandings(group.id).length > 0 ? (
