@@ -3,7 +3,7 @@ import type { Dispatch } from 'react';
 import React, { createContext, useContext, useReducer, useEffect, useState } from 'react';
 import type { TournamentState, TournamentAction, Team, Group, Match, GroupTeamStats, KnockoutMatch, League, LeagueZoneSetting } from '@/types';
 import { toast } from "@/hooks/use-toast";
-import { db } from '../lib/firebaseConfig.ts'; // RUTA RELATIVA EXPLÍCITA CON .ts
+import { db } from '../lib/firebaseConfig'; // MODIFIED: Using relative path
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 const initialState: TournamentState = {
