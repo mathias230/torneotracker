@@ -3,8 +3,9 @@ import type { Dispatch } from 'react';
 import React, { createContext, useContext, useReducer, useEffect, useState } from 'react';
 import type { TournamentState, TournamentAction, Team, Group, Match, GroupTeamStats, KnockoutMatch, League, LeagueZoneSetting } from '@/types';
 import { toast } from "@/hooks/use-toast";
-import { db } from '../lib/firebaseConfig'; // MODIFIED: Using relative path
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+// DIAGNOSTIC: Commented out Firebase imports
+// import { db } from '../lib/firebaseConfig.ts'; 
+// import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 const initialState: TournamentState = {
   teams: [],
@@ -130,14 +131,15 @@ const TOURNAMENT_DOC_PATH = "tournaments_shared/default_tournament";
 const saveTournamentStateToFirestore = async (state: TournamentState) => {
   try {
     const { isInitialized, ...stateToSave } = state; 
-    const tournamentDocRef = doc(db, TOURNAMENT_DOC_PATH);
-    await setDoc(tournamentDocRef, stateToSave);
-    console.log("TournamentContext [Firestore SAVE]: Tournament state saved to Firestore", stateToSave);
+    // DIAGNOSTIC: Commented out Firestore logic
+    // const tournamentDocRef = doc(db, TOURNAMENT_DOC_PATH);
+    // await setDoc(tournamentDocRef, stateToSave);
+    console.log("TournamentContext [Firestore SAVE SKIPPED FOR DIAGNOSTIC]: Tournament state would be saved:", stateToSave);
   } catch (error) {
-    console.error("TournamentContext [Firestore SAVE ERROR]: Error saving tournament state to Firestore:", error);
+    console.error("TournamentContext [Firestore SAVE ERROR SKIPPED FOR DIAGNOSTIC]: Error saving tournament state:", error);
     toast({
-      title: "Error de Sincronización",
-      description: "No se pudo guardar el estado del torneo en la nube. Ver consola para detalles.",
+      title: "Error de Sincronización (Simulado)",
+      description: "No se pudo guardar el estado del torneo en la nube (simulado).",
       variant: "destructive",
     });
   }
@@ -650,13 +652,15 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
       if (typeof window !== 'undefined') {
         localStorage.removeItem('tournamentState');
       }
-      newState = { ...initialState, isAdminMode: false, isInitialized: true }; // Mantenemos isAdminMode para que el usuario no tenga que volver a ingresar el código
-      const tournamentDocRef = doc(db, TOURNAMENT_DOC_PATH);
-      deleteDoc(tournamentDocRef).then(() => {
-        console.log("TournamentContext [Firestore RESET]: Tournament data deleted from Firestore");
-      }).catch(error => {
-        console.error("TournamentContext [Firestore RESET ERROR]: Error deleting tournament data from Firestore:", error);
-      });
+      newState = { ...initialState, isAdminMode: false, isInitialized: true }; 
+      // DIAGNOSTIC: Commented out Firestore logic
+      // const tournamentDocRef = doc(db, TOURNAMENT_DOC_PATH);
+      // deleteDoc(tournamentDocRef).then(() => {
+      //   console.log("TournamentContext [Firestore RESET]: Tournament data deleted from Firestore");
+      // }).catch(error => {
+      //   console.error("TournamentContext [Firestore RESET ERROR]: Error deleting tournament data from Firestore:", error);
+      // });
+      console.log("TournamentContext [Firestore RESET SKIPPED FOR DIAGNOSTIC]: Firestore data delete call skipped.");
       break;
     }
     default:
@@ -743,7 +747,12 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (state.isInitialized) {
       console.log("TournamentContext [SAVE]: Saving state. Current isAdminMode:", state.isAdminMode, "Full state:", state);
       localStorage.setItem('tournamentState', JSON.stringify(state));
-      saveTournamentStateToFirestore(state);
+      // DIAGNOSTIC: Conditional call to prevent error if function is not available due to commented imports
+      if (typeof saveTournamentStateToFirestore === 'function') {
+        saveTournamentStateToFirestore(state);
+      } else {
+        console.log("TournamentContext [SAVE SKIPPED FOR DIAGNOSTIC]: saveTournamentStateToFirestore is not available.");
+      }
     }
   }, [state]);
 
@@ -794,5 +803,7 @@ export const useIsClient = () => {
   useEffect(() => setIsClient(true), []);
   return isClient;
 }
+
+    
 
     
