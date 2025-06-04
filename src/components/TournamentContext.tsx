@@ -4,16 +4,16 @@ import type { Dispatch } from 'react';
 import React, { createContext, useContext, useReducer, useEffect, useState } from 'react';
 import type { TournamentState, TournamentAction, Team, Group, Match, GroupTeamStats, KnockoutMatch, League, LeagueZoneSetting } from '@/types';
 import { toast } from "@/hooks/use-toast";
-import { db } from '@/lib/firebaseConfig'; // Using alias path
+import { db } from '../lib/firebaseConfig.ts'; // <-- RUTA RELATIVA EXPLÍCITA
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 const initialState: TournamentState = {
   teams: [],
   groups: [],
   league: null,
-  knockoutRounds: {}, 
+  knockoutRounds: {},
   isInitialized: false,
-  isAdminMode: false, 
+  isAdminMode: false,
 };
 
 // Fisher-Yates Shuffle Algorithm
@@ -130,7 +130,7 @@ const TOURNAMENT_DOC_PATH = "tournaments_shared/default_tournament";
 
 const saveTournamentStateToFirestore = async (state: TournamentState) => {
   try {
-    const { isInitialized, ...stateToSave } = state; 
+    const { isInitialized, ...stateToSave } = state;
     const tournamentDocRef = doc(db, TOURNAMENT_DOC_PATH);
     await setDoc(tournamentDocRef, stateToSave);
     console.log("TournamentContext [Firestore SAVE]: Tournament state saved to Firestore", stateToSave);
@@ -190,7 +190,7 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
             newMatch.team2Name = "Equipo Eliminado";
           }
           return newMatch;
-        }).filter(match => match.team1Id !== teamIdToDelete && match.team2Id !== teamIdToDelete); 
+        }).filter(match => match.team1Id !== teamIdToDelete && match.team2Id !== teamIdToDelete);
       });
 
 
@@ -314,7 +314,7 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
     case 'CREATE_KNOCKOUT_STAGE': {
       const { numTeams, selectedTeamIds } = action.payload;
       if (numTeams < 2 || (numTeams & (numTeams - 1)) !== 0) {
-        return state; 
+        return state;
       }
 
       const rounds: { [roundIndex: string]: KnockoutMatch[] } = {};
@@ -384,7 +384,7 @@ const tournamentReducer = (state: TournamentState, action: TournamentAction): To
         currentRoundTeams = nextRoundPlaceholders;
         teamsInCurrentRound /= 2;
         roundIndex++;
-         if (roundIndex > 10) break; 
+         if (roundIndex > 10) break;
       }
       newState = { ...state, knockoutRounds: rounds };
       break;
@@ -684,11 +684,11 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           const loadedSavedState = JSON.parse(savedStateString) as Partial<TournamentState>;
           console.log("TournamentContext [LOAD]: Parsed from localStorage:", loadedSavedState);
           
-          const parsedKnockoutRounds = (typeof loadedSavedState.knockoutRounds === 'object' && 
-                                      loadedSavedState.knockoutRounds !== null && 
+          const parsedKnockoutRounds = (typeof loadedSavedState.knockoutRounds === 'object' &&
+                                      loadedSavedState.knockoutRounds !== null &&
                                       !Array.isArray(loadedSavedState.knockoutRounds))
             ? loadedSavedState.knockoutRounds
-            : initialState.knockoutRounds; 
+            : initialState.knockoutRounds;
 
           statePayload = {
             teams: loadedSavedState.teams || initialState.teams,
@@ -697,7 +697,7 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               name: g.name || 'Grupo',
               matches: g.matches || [],
               teamIds: g.teamIds || [],
-              zoneSettings: (g.zoneSettings || []).map(zs => ({ 
+              zoneSettings: (g.zoneSettings || []).map(zs => ({
                 id: zs.id || `zone-${Date.now()}-${Math.random().toString(36).substring(2,7)}`,
                 name: zs.name || 'Zona sin nombre',
                 startPosition: typeof zs.startPosition === 'number' ? zs.startPosition : 1,
@@ -717,14 +717,14 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               zoneSettings: (loadedSavedState.league.zoneSettings || []).map(zs => ({
                 id: zs.id || `zone-${Date.now()}-${Math.random().toString(36).substring(2,7)}`,
                 name: zs.name || 'Zona sin nombre',
-                startPosition: typeof zs.startPosition === 'number' ? zs.startPosition : (typeof (zs as any).positions === 'number' ? 1 : 0), 
-                endPosition: typeof zs.endPosition === 'number' ? zs.endPosition : (typeof (zs as any).positions === 'number' ? (zs as any).positions : 0), 
+                startPosition: typeof zs.startPosition === 'number' ? zs.startPosition : (typeof (zs as any).positions === 'number' ? 1 : 0),
+                endPosition: typeof zs.endPosition === 'number' ? zs.endPosition : (typeof (zs as any).positions === 'number' ? (zs as any).positions : 0),
                 color: zs.color || '#000000',
                 ...zs
               })),
             } : initialState.league,
             isAdminMode: typeof loadedSavedState.isAdminMode === 'boolean' ? loadedSavedState.isAdminMode : initialState.isAdminMode,
-            isInitialized: false, 
+            isInitialized: false,
           };
           console.log("TournamentContext [LOAD]: isAdminMode after attempting to load:", statePayload.isAdminMode);
           console.log("TournamentContext [LOAD]: knockoutRounds after attempting to load:", statePayload.knockoutRounds);
@@ -795,5 +795,3 @@ export const useIsClient = () => {
   useEffect(() => setIsClient(true), []);
   return isClient;
 }
-
-    
